@@ -43,6 +43,10 @@ export default function App() {
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
 
+  // Screen area attachment & chat visibility
+  const [attachedArea, setAttachedArea] = useState<{ label: string; coords?: { x: number; y: number; w: number; h: number } } | null>(null);
+  const [isChatVisible, setIsChatVisible] = useState(true);
+
   // Live Agent WebSocket & REST Service Connection
   const {
     isConnected,
@@ -59,12 +63,13 @@ export default function App() {
     }
   }, [sessionState?.status, sessionState?.pendingTier2]);
 
-  // Global Hotkey Listener: Win/Ctrl + Shift + C for DXGI Capture
+  // Global Hotkey Listener: Win/Ctrl + Shift + C for Shortcut Summon & Screen Select
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
         e.preventDefault();
-        setIsCaptureActive((prev) => !prev);
+        setIsChatVisible(true);
+        setIsCaptureActive(prev => !prev);
       }
       if (e.key === 'Escape') {
         setIsCaptureActive(false);
@@ -313,107 +318,118 @@ export default function App() {
               }}
             />
 
-            {/* Desktop Workspace Title & Active App Cards (simulating open apps) */}
-            <div className="relative z-10 p-6 flex-1 flex flex-col justify-between">
-              {/* Top Row: Workspace Windows & Floating HUD */}
-              <div className="flex items-start justify-between gap-6">
-                {/* Simulated Foreground Windows (e.g. VS Code & Terminal) */}
-                <div className="space-y-4 max-w-lg hidden md:block">
-                  {/* VS Code Window Preview */}
-                  <div className={`p-4 rounded-2xl border shadow-lg backdrop-blur-md transition-all ${
-                    isDarkMode ? 'bg-[#0f141c]/80 border-slate-800 text-slate-200' : 'bg-white/80 border-slate-200 text-slate-800'
-                  }`}>
-                    <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-800/60 mb-2.5">
-                      <div className="flex items-center gap-2">
-                        <div className="flex gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
-                          <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
-                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
-                        </div>
-                        <div className="flex items-center gap-1.5 text-xs font-mono font-medium pl-1">
-                          <Code2 size={13} className="text-[#438BC4]" />
-                          <span>project-horizon — VS Code</span>
-                        </div>
+            {/* Desktop Workspace Content: Active Apps Workspace */}
+            <div className="relative z-10 p-6 flex-1 flex flex-col justify-between overflow-hidden">
+              {/* Workspace Background Windows (VS Code & Terminal preview) */}
+              <div className="space-y-4 max-w-xl hidden md:block">
+                {/* VS Code Window Preview */}
+                <div className={`p-4 rounded-2xl border shadow-lg backdrop-blur-md transition-all ${
+                  isDarkMode ? 'bg-[#0f141c]/80 border-slate-800 text-slate-200' : 'bg-white/80 border-slate-200 text-slate-800'
+                }`}>
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-800/60 mb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
                       </div>
-                      <span className="text-[10px] font-mono text-slate-400">PID: 4920</span>
+                      <div className="flex items-center gap-1.5 text-xs font-mono font-medium pl-1">
+                        <Code2 size={13} className="text-[#438BC4]" />
+                        <span>project-horizon — VS Code</span>
+                      </div>
                     </div>
-                    <div className="font-mono text-xs text-slate-400 space-y-1">
-                      <div className="text-[#8CC1E9]">// Active Editor: src/shaders/liquid.frag</div>
-                      <div>void main() &#123; gl_FragColor = vec4(0.55, 0.76, 0.91, 1.0); &#125;</div>
-                    </div>
+                    <span className="text-[10px] font-mono text-slate-400">PID: 4920</span>
                   </div>
-
-                  {/* Terminal Window Preview */}
-                  <div className={`p-4 rounded-2xl border shadow-lg backdrop-blur-md transition-all ${
-                    isDarkMode ? 'bg-[#0a0d14]/80 border-slate-800 text-slate-300' : 'bg-white/80 border-slate-200 text-slate-700'
-                  }`}>
-                    <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-800/60 mb-2">
-                      <div className="flex items-center gap-2 text-xs font-mono">
-                        <Terminal size={13} className="text-emerald-400" />
-                        <span>PowerShell · Horizon Daemon</span>
-                      </div>
-                      <span className="text-[10px] font-mono text-emerald-400">PORT 4100 / 4200 OK</span>
-                    </div>
-                    <div className="font-mono text-[11px] text-slate-400">
-                      <div>$ project-horizon --listen 4100 --ws /ws/hud</div>
-                      <div className="text-emerald-400/90">✓ FTS5 Indexer synchronized 10,000+ files (1.05ms)</div>
-                      <div className="text-[#8CC1E9]">✓ Safety Gate Chokepoint Active (Zero VIPI bypass)</div>
-                    </div>
+                  <div className="font-mono text-xs text-slate-400 space-y-1">
+                    <div className="text-[#8CC1E9]">// Active Editor: src/shaders/liquid.frag</div>
+                    <div>void main() &#123; gl_FragColor = vec4(0.55, 0.76, 0.91, 1.0); &#125;</div>
                   </div>
                 </div>
 
-                {/* FLOATING HUD: Collapsed Chip with Expandable ReAct Trace */}
-                <div className="flex flex-col items-end gap-3 z-30">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] uppercase font-mono tracking-wider font-bold text-[#0055A0] dark:text-[#8CC1E9]">
-                      Live Floating HUD
-                    </span>
-                  </div>
-
-                  {/* HUD Collapsed State Chip */}
-                  <HUDCollapsedChip
-                    isDarkMode={isDarkMode}
-                    onExpandTrace={() => setIsTraceExpanded(prev => !prev)}
-                    currentNarration={sessionState?.currentNarration}
-                  />
-
-                  {/* HUD Expanded ReAct Trace Panel (Expands when clicked) */}
-                  {isTraceExpanded && (
-                    <div className="animate-fade-in pt-1">
-                      <ReActTracePanel
-                        isDarkMode={isDarkMode}
-                        steps={liveTraceSteps}
-                        onClose={() => setIsTraceExpanded(false)}
-                      />
+                {/* Terminal Window Preview */}
+                <div className={`p-4 rounded-2xl border shadow-lg backdrop-blur-md transition-all ${
+                  isDarkMode ? 'bg-[#0a0d14]/80 border-slate-800 text-slate-300' : 'bg-white/80 border-slate-200 text-slate-700'
+                }`}>
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-800/60 mb-2">
+                    <div className="flex items-center gap-2 text-xs font-mono">
+                      <Terminal size={13} className="text-emerald-400" />
+                      <span>PowerShell · Horizon Daemon</span>
                     </div>
-                  )}
+                    <span className="text-[10px] font-mono text-emerald-400">PORT 4100 / 4200 OK</span>
+                  </div>
+                  <div className="font-mono text-[11px] text-slate-400">
+                    <div>$ project-horizon --listen 4100 --ws /ws/hud</div>
+                    <div className="text-emerald-400/90">✓ FTS5 Indexer synchronized 10,000+ files (1.05ms)</div>
+                    <div className="text-[#8CC1E9]">✓ Safety Gate Chokepoint Active (Zero VIPI bypass)</div>
+                  </div>
                 </div>
               </div>
 
-              {/* Bottom Center: Floating Contextual Prompt Bar */}
-              <div className="w-full flex flex-col items-center justify-center my-auto py-8 z-20">
-                <ContextualPromptBar
-                  isDarkMode={isDarkMode}
-                  onSubmitPrompt={async (prompt) => {
-                    if (isConnected) {
-                      try {
-                        await dispatchTask(prompt);
-                      } catch (e) {
-                        console.error('Task dispatch error:', e);
-                      }
-                    }
-                  }}
-                />
+              {/* DOCKED AT THE BOTTOM: Agent Thinking HUD (Logs) & Chat Component directly above Taskbar */}
+              <div className="w-full max-w-2xl mx-auto flex flex-col items-center gap-3 pt-6 pb-2 z-30">
+                {/* Agent Thinking & Logs: Collapsed by Default with "View Logs" / "Collapse Logs" Toggle */}
+                {(sessionState?.status === 'working' || sessionState?.status === 'done' || sessionState?.status === 'error' || isExecuting || true) && (
+                  <div className="w-full flex flex-col items-center gap-2 animate-fade-in">
+                    {/* Expanded ReAct Trace Panel (Only when user expands logs) */}
+                    {isTraceExpanded && (
+                      <div className="w-full max-h-72 overflow-y-auto mb-1 animate-slide-up shadow-2xl">
+                        <ReActTracePanel
+                          isDarkMode={isDarkMode}
+                          steps={liveTraceSteps}
+                          onClose={() => setIsTraceExpanded(false)}
+                        />
+                      </div>
+                    )}
+
+                    {/* HUD Collapsed State Chip (Default) */}
+                    <HUDCollapsedChip
+                      isDarkMode={isDarkMode}
+                      isExpanded={isTraceExpanded}
+                      onToggleLogs={() => setIsTraceExpanded(prev => !prev)}
+                      currentNarration={sessionState?.currentNarration}
+                    />
+                  </div>
+                )}
+
+                {/* The Chat Component (Docked just above the taskbar) */}
+                {isChatVisible && (
+                  <div className="w-full animate-fade-in">
+                    <ContextualPromptBar
+                      isDarkMode={isDarkMode}
+                      attachment={attachedArea}
+                      onTriggerLasso={() => setIsCaptureActive(true)}
+                      onClearAttachment={() => setAttachedArea(null)}
+                      onSubmitPrompt={async (prompt, attachment) => {
+                        const fullPrompt = attachment
+                          ? `[Target Screen Crop ${attachment.coords ? `(${attachment.coords.x}, ${attachment.coords.y}, ${attachment.coords.w}, ${attachment.coords.h})` : ''}]: ${prompt}`
+                          : prompt;
+                        setAttachedArea(null);
+                        if (isConnected) {
+                          try {
+                            await dispatchTask(fullPrompt);
+                          } catch (e) {
+                            console.error('Task execution error:', e);
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* FULL-SCREEN DXGI CAPTURE OVERLAY (When active) */}
+            {/* FULL-SCREEN DXGI CAPTURE OVERLAY (When user triggers lasso to circle an area) */}
             {isCaptureActive && (
               <div className="absolute inset-0 z-40 bg-black/60 backdrop-blur-sm p-4 flex items-center justify-center animate-fade-in">
                 <div className="w-full max-w-4xl relative">
                   <CaptureOverlayCanvas
                     isDarkMode={isDarkMode}
                     onExit={() => setIsCaptureActive(false)}
+                    onAttachArea={(coords) => {
+                      setAttachedArea({ label: 'Selected Area', coords });
+                      setIsCaptureActive(false);
+                      setIsChatVisible(true);
+                    }}
                   />
                   <button
                     onClick={() => setIsCaptureActive(false)}

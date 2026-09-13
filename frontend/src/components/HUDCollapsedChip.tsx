@@ -5,6 +5,8 @@ import { GeminiSparkle } from './GeminiSparkle';
 interface HUDCollapsedChipProps {
   isDarkMode: boolean;
   onExpandTrace?: () => void;
+  isExpanded?: boolean;
+  onToggleLogs?: () => void;
   currentNarration?: string;
   toolCategory?: string;
 }
@@ -12,6 +14,8 @@ interface HUDCollapsedChipProps {
 export const HUDCollapsedChip: React.FC<HUDCollapsedChipProps> = ({ 
   isDarkMode, 
   onExpandTrace,
+  isExpanded = false,
+  onToggleLogs,
   currentNarration,
   toolCategory = "search"
 }) => {
@@ -82,21 +86,25 @@ export const HUDCollapsedChip: React.FC<HUDCollapsedChipProps> = ({
             </div>
           </div>
 
-          {/* Controls */}
-          <div className="flex items-center gap-1 flex-shrink-0">
+          {/* Controls: View / Collapse Logs (collapsed by default) */}
+          <div className="flex items-center gap-2 flex-shrink-0">
             <button
-              onClick={onExpandTrace || (() => alert("Trigger: Expand to §5.4 ReAct Trace Panel"))}
-              className="p-1.5 rounded-full text-slate-400 hover:text-[#8CC1E9] hover:bg-[#8CC1E9]/15 transition-colors"
-              title="Expand Trace"
+              onClick={onToggleLogs || onExpandTrace}
+              className={`px-3 py-1 rounded-full text-xs font-semibold border flex items-center gap-1.5 transition-all shadow-sm ${
+                isExpanded
+                  ? 'border-[#8CC1E9] bg-[#8CC1E9]/25 text-[#0055A0] dark:text-[#8CC1E9]'
+                  : 'border-slate-300 dark:border-slate-700 bg-white/50 dark:bg-carbon-850 text-slate-700 dark:text-slate-200 hover:border-[#8CC1E9]'
+              }`}
             >
-              <ChevronDown size={17} />
+              <span>{isExpanded ? 'Collapse Logs' : 'View Logs'}</span>
+              <ChevronDown size={14} className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
             </button>
             <button
               onClick={() => setIsMinimized(true)}
               className="p-1.5 rounded-full text-slate-400 hover:text-[#FFF8E7] hover:bg-[#438BC4]/20 transition-colors"
-              title="Minimize"
+              title="Minimize HUD"
             >
-              <Minus size={17} />
+              <Minus size={15} />
             </button>
           </div>
         </div>

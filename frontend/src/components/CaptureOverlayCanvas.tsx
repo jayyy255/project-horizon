@@ -5,11 +5,13 @@ import { GeminiSparkle } from './GeminiSparkle';
 interface CaptureOverlayCanvasProps {
   isDarkMode: boolean;
   onExit?: () => void;
+  onAttachArea?: (coords: { x: number; y: number; w: number; h: number }) => void;
 }
 
 export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({ 
   isDarkMode, 
-  onExit 
+  onExit,
+  onAttachArea
 }) => {
   const [showAABB, setShowAABB] = useState(true);
   const simulatedCoords = { x: 1420, y: 860, w: 420, h: 260 };
@@ -119,6 +121,15 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
         <div className={`absolute top-4 right-4 z-30 flex items-center gap-2 p-1.5 rounded-2xl border shadow-xl ${
           isDarkMode ? 'liquid-glass-dark text-slate-200 border-[#8CC1E9]/30' : 'liquid-glass-light text-slate-800 border-[#8CC1E9]/35'
         }`}>
+          {showAABB && onAttachArea && (
+            <button
+              onClick={() => onAttachArea(simulatedCoords)}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-[#0055A0] via-[#438BC4] to-[#8CC1E9] text-[#FFF8E7] flex items-center gap-1.5 shadow-md shadow-[#438BC4]/30 hover:brightness-110 transition-all border border-[#FFF8E7]/30"
+            >
+              <GeminiSparkle size={12} />
+              <span>Attach to Chat</span>
+            </button>
+          )}
           {showAABB ? (
             <button
               onClick={() => setShowAABB(false)}
