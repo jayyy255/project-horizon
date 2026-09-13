@@ -5,7 +5,7 @@ import { GeminiSparkle } from './GeminiSparkle';
 interface CaptureOverlayCanvasProps {
   isDarkMode: boolean;
   onExit?: () => void;
-  onAttachArea?: (coords: { x: number; y: number; w: number; h: number }) => void;
+  onAttachArea?: (data: { type: 'crop' | 'fullscreen'; label: string; coords?: { x: number; y: number; w: number; h: number } }) => void;
 }
 
 export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({ 
@@ -18,7 +18,7 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
 
   return (
     <div className="w-full max-w-4xl relative rounded-3xl overflow-hidden border border-[#8CC1E9]/35 dark:border-slate-800 shadow-2xl">
-      {/* Simulated DXGI Desktop Background Canvas */}
+      {/* Desktop Background Canvas */}
       <div 
         className="w-full h-[380px] relative p-5 select-none transition-colors"
         style={{
@@ -36,7 +36,7 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
           }}
         />
 
-        {/* Frozen Frame Banner with Celestial/Cosmic Status */}
+        {/* Clean Screen Capture Indicator */}
         <div className="absolute top-4 left-4 z-20 flex items-center gap-2.5">
           <span className="flex h-2.5 w-2.5 relative">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#8CC1E9] opacity-75"></span>
@@ -46,7 +46,7 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
             isDarkMode ? 'liquid-glass-dark text-slate-200 border-[#8CC1E9]/30' : 'liquid-glass-light text-slate-800 font-medium shadow-sm border-[#8CC1E9]/40'
           }`}>
             <GeminiSparkle size={13} />
-            <span>GEMINI_SURFACE // FROZEN FRAME [2560×1440 @ 144Hz]</span>
+            <span>Screen Capture Active · Select or Circle Area</span>
           </span>
         </div>
 
@@ -121,14 +121,24 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
         <div className={`absolute top-4 right-4 z-30 flex items-center gap-2 p-1.5 rounded-2xl border shadow-xl ${
           isDarkMode ? 'liquid-glass-dark text-slate-200 border-[#8CC1E9]/30' : 'liquid-glass-light text-slate-800 border-[#8CC1E9]/35'
         }`}>
-          {showAABB && onAttachArea && (
-            <button
-              onClick={() => onAttachArea(simulatedCoords)}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-[#0055A0] via-[#438BC4] to-[#8CC1E9] text-[#FFF8E7] flex items-center gap-1.5 shadow-md shadow-[#438BC4]/30 hover:brightness-110 transition-all border border-[#FFF8E7]/30"
-            >
-              <GeminiSparkle size={12} />
-              <span>Attach to Chat</span>
-            </button>
+          {onAttachArea && (
+            <>
+              {showAABB && (
+                <button
+                  onClick={() => onAttachArea({ type: 'crop', label: 'Screen Crop', coords: simulatedCoords })}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-[#0055A0] via-[#438BC4] to-[#8CC1E9] text-[#FFF8E7] flex items-center gap-1.5 shadow-md shadow-[#438BC4]/30 hover:brightness-110 transition-all border border-[#FFF8E7]/30"
+                >
+                  <GeminiSparkle size={12} />
+                  <span>Attach Selection</span>
+                </button>
+              )}
+              <button
+                onClick={() => onAttachArea({ type: 'fullscreen', label: 'Full Screen', coords: { x: 0, y: 0, w: 1920, h: 1080 } })}
+                className="px-3 py-1.5 rounded-xl text-xs font-medium border border-slate-300 dark:border-slate-700 hover:border-[#8CC1E9] text-slate-700 dark:text-slate-200 transition-all flex items-center gap-1.5"
+              >
+                <span>Attach Full Screen</span>
+              </button>
+            </>
           )}
           {showAABB ? (
             <button

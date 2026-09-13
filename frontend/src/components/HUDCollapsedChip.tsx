@@ -109,24 +109,6 @@ export const HUDCollapsedChip: React.FC<HUDCollapsedChipProps> = ({
           </div>
         </div>
       </div>
-
-      {/* Category Toggle Pills */}
-      <div className="flex items-center gap-1.5 p-1 rounded-full border border-slate-200 dark:border-slate-800 text-xs bg-slate-100/70 dark:bg-carbon-850">
-        <span className="text-[10px] font-medium text-slate-400 uppercase px-2">Tool:</span>
-        {['search', 'click', 'launch', 'type', 'hotkey'].map(cat => (
-          <button
-            key={cat}
-            onClick={() => setCategory(cat)}
-            className={`px-3 py-1 rounded-full capitalize text-xs transition-all ${
-              category === cat 
-                ? 'bg-gradient-to-r from-[#0055A0] via-[#438BC4] to-[#8CC1E9] text-[#FFF8E7] font-bold shadow-md shadow-[#438BC4]/35 border border-[#FFF8E7]/30' 
-                : 'text-slate-600 dark:text-slate-400 hover:text-[#0055A0] dark:hover:text-[#8CC1E9]'
-            }`}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
     </div>
   );
 };

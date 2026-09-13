@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { GeminiSparkle } from './components/GeminiSparkle';
 import { ComponentCard } from './components/ComponentCard';
 import { CaptureOverlayCanvas } from './components/CaptureOverlayCanvas';
-import { ContextualPromptBar } from './components/ContextualPromptBar';
+import { ContextualPromptBar, ScreenAttachment } from './components/ContextualPromptBar';
 import { HUDCollapsedChip } from './components/HUDCollapsedChip';
 import { ReActTracePanel, TraceStep } from './components/ReActTracePanel';
 import { Tier2Modal } from './components/Tier2Modal';
@@ -43,9 +43,26 @@ export default function App() {
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
 
-  // Screen area attachment & chat visibility
-  const [attachedArea, setAttachedArea] = useState<{ label: string; coords?: { x: number; y: number; w: number; h: number } } | null>(null);
+  // Screen attachments & chat visibility
+  const [attachments, setAttachments] = useState<ScreenAttachment[]>([]);
   const [isChatVisible, setIsChatVisible] = useState(true);
+  const [chatMessages, setChatMessages] = useState<Array<{ id: string; prompt: string; timestamp: string; attachmentsCount: number }>>([]);
+  const [, setPastSessions] = useState<Array<{ id: number; title: string; time: string; messagesCount: number; status: string }>>([
+    { id: 1, title: "Explain compile error in WebGL vertex shader", time: "12m ago", messagesCount: 2, status: "succeeded" },
+    { id: 2, title: "Open target repo in VS Code and branch to feature/liquid", time: "48m ago", messagesCount: 1, status: "succeeded" }
+  ]);
+
+  // Dynamically opened applications by the AI agent
+  interface ActiveAppWindow {
+    id: string;
+    title: string;
+    type: 'vscode' | 'chrome' | 'graph';
+    pid: number;
+    activeFile?: string;
+    codeSnippet?: string;
+    graphData?: { nodes: number; edges: number; label: string };
+  }
+  const [activeApps, setActiveApps] = useState<ActiveAppWindow[]>([]);
 
   // Live Agent WebSocket & REST Service Connection
   const {
@@ -87,6 +104,117 @@ export default function App() {
 
   const toggleTheme = () => {
     setIsDarkMode(prev => !prev);
+  };
+
+  const handleAddAttachment = (data: { type: 'crop' | 'fullscreen'; label: string; coords?: { x: number; y: number; w: number; h: number } }) => {
+    const newAtt: ScreenAttachment = {
+      id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      label: data.label,
+      type: data.type,
+      coords: data.coords,
+      timestamp: Date.now()
+    };
+    setAttachments(prev => [...prev, newAtt]);
+    setIsCaptureActive(false);
+    setIsChatVisible(true);
+  };
+
+  const handleQuickFullScreenCapture = () => {
+    handleAddAttachment({
+      type: 'fullscreen',
+      label: 'Full Screen',
+      coords: { x: 0, y: 0, w: 1920, h: 1080 }
+    });
+  };
+
+  const handleRemoveAttachment = (id: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== id));
+  };
+
+  const handleClearAttachments = () => {
+    setAttachments([]);
+  };
+
+  const handleWorkspaceClick = () => {
+    if (isCaptureActive) return;
+    if (!isChatVisible) return;
+
+    if (chatMessages.length === 0 && attachments.length === 0) {
+      // No chat made: exit application spotlight
+      setIsChatVisible(false);
+    } else {
+      // Chat made: preserve and add to previous chat history
+      if (chatMessages.length > 0) {
+        setPastSessions(prev => [
+          {
+            id: Date.now(),
+            title: chatMessages[chatMessages.length - 1].prompt,
+            time: 'Just now',
+            messagesCount: chatMessages.length,
+            status: 'succeeded'
+          },
+          ...prev
+        ]);
+      }
+      setChatMessages([]);
+      setAttachments([]);
+      setIsChatVisible(false);
+    }
+  };
+
+  const handleTaskSubmit = async (prompt: string, atts: ScreenAttachment[]) => {
+    setChatMessages(prev => [
+      ...prev,
+      {
+        id: `msg-${Date.now()}`,
+        prompt,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        attachmentsCount: atts.length
+      }
+    ]);
+
+    const lower = prompt.toLowerCase();
+    if (lower.includes("open vs") || lower.includes("open code") || lower.includes("open vscode") || lower.includes("launch vs")) {
+      if (!activeApps.some(app => app.type === 'vscode')) {
+        setActiveApps(prev => [
+          ...prev,
+          {
+            id: `vscode-${Date.now()}`,
+            title: 'project-horizon — VS Code',
+            type: 'vscode',
+            pid: 4920,
+            activeFile: 'src/shaders/liquid.frag',
+            codeSnippet: 'void main() { gl_FragColor = vec4(0.55, 0.76, 0.91, 1.0); }'
+          }
+        ]);
+      }
+    } else if (lower.includes("graph") || lower.includes("prepare graph") || lower.includes("query graph")) {
+      if (!activeApps.some(app => app.type === 'graph')) {
+        setActiveApps(prev => [
+          ...prev,
+          {
+            id: `graph-${Date.now()}`,
+            title: 'Project Horizon — Knowledge Graph',
+            type: 'graph',
+            pid: 5180,
+            graphData: { nodes: 142, edges: 320, label: 'Codebase Dependency & Security Graph' }
+          }
+        ]);
+      }
+    }
+
+    const fullPrompt = atts.length > 0
+      ? `[${atts.map(a => a.type === 'crop' && a.coords ? `Crop (${a.coords.x},${a.coords.y},${a.coords.w}×${a.coords.h})` : a.label).join(', ')}]: ${prompt}`
+      : prompt;
+
+    setAttachments([]);
+    if (isConnected) {
+      try {
+        await dispatchTask(fullPrompt);
+      } catch (e) {
+        console.error('Task execution error:', e);
+      }
+    }
   };
 
   useEffect(() => {
@@ -236,10 +364,10 @@ export default function App() {
                   ? 'bg-[#8CC1E9]/20 border-[#8CC1E9] text-[#0055A0] dark:text-[#8CC1E9]' 
                   : 'border-slate-200 dark:border-slate-700 hover:border-[#8CC1E9] text-slate-700 dark:text-slate-300'
               }`}
-              title="Toggle DXGI Freeze Canvas Overlay (Win+Shift+C)"
+              title="Screen Capture (Win+Shift+C)"
             >
               <Camera size={14} />
-              <span>{isCaptureActive ? 'Exit Capture' : 'Capture Screen'}</span>
+              <span>{isCaptureActive ? 'Exit Capture' : 'Screen Capture'}</span>
             </button>
 
             {/* Simulate Tier 2 Interrupter */}
@@ -319,57 +447,104 @@ export default function App() {
             />
 
             {/* Desktop Workspace Content: Active Apps Workspace */}
-            <div className="relative z-10 p-6 flex-1 flex flex-col justify-between overflow-hidden">
-              {/* Workspace Background Windows (VS Code & Terminal preview) */}
-              <div className="space-y-4 max-w-xl hidden md:block">
-                {/* VS Code Window Preview */}
-                <div className={`p-4 rounded-2xl border shadow-lg backdrop-blur-md transition-all ${
-                  isDarkMode ? 'bg-[#0f141c]/80 border-slate-800 text-slate-200' : 'bg-white/80 border-slate-200 text-slate-800'
-                }`}>
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-800/60 mb-2.5">
-                    <div className="flex items-center gap-2">
-                      <div className="flex gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
-                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
+            <div 
+              onClick={handleWorkspaceClick}
+              className="relative z-10 p-6 flex-1 flex flex-col justify-between overflow-hidden cursor-default"
+            >
+              {/* Dynamic Opened Windows Area (Only shown when opened by AI agent command) */}
+              <div className="space-y-4 max-w-xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
+                {activeApps.map((app) => (
+                  <div 
+                    key={app.id}
+                    className={`p-4 rounded-2xl border shadow-xl backdrop-blur-md transition-all animate-slide-up ${
+                      isDarkMode ? 'bg-[#0f141c]/90 border-slate-700/80 text-slate-200' : 'bg-white/95 border-slate-300 text-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-800/60 mb-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-1.5">
+                          <button 
+                            onClick={() => setActiveApps(prev => prev.filter(a => a.id !== app.id))}
+                            className="w-2.5 h-2.5 rounded-full bg-rose-500/90 hover:opacity-100 transition-opacity" 
+                            title="Close Window"
+                          />
+                          <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs font-mono font-semibold pl-1">
+                          {app.type === 'vscode' && <Code2 size={13} className="text-[#438BC4]" />}
+                          {app.type === 'graph' && <Layers size={13} className="text-emerald-400" />}
+                          <span>{app.title}</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5 text-xs font-mono font-medium pl-1">
-                        <Code2 size={13} className="text-[#438BC4]" />
-                        <span>project-horizon — VS Code</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono text-slate-400">PID: {app.pid}</span>
+                        <button 
+                          onClick={() => setActiveApps(prev => prev.filter(a => a.id !== app.id))}
+                          className="text-slate-400 hover:text-rose-400 p-0.5"
+                          title="Close"
+                        >
+                          <X size={12} />
+                        </button>
                       </div>
                     </div>
-                    <span className="text-[10px] font-mono text-slate-400">PID: 4920</span>
+                    {app.type === 'vscode' && (
+                      <div className="font-mono text-xs text-slate-400 space-y-1">
+                        <div className="text-[#8CC1E9]">// {app.activeFile}</div>
+                        <div className="text-slate-200 dark:text-slate-300">{app.codeSnippet}</div>
+                      </div>
+                    )}
+                    {app.type === 'graph' && app.graphData && (
+                      <div className="font-mono text-xs text-slate-400 space-y-1.5">
+                        <div className="text-emerald-400 font-semibold">{app.graphData.label}</div>
+                        <div className="flex items-center gap-3 text-[11px]">
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                            {app.graphData.nodes} Nodes
+                          </span>
+                          <span className="px-2 py-0.5 rounded bg-[#8CC1E9]/15 text-[#8CC1E9] border border-[#8CC1E9]/30">
+                            {app.graphData.edges} Edges
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="font-mono text-xs text-slate-400 space-y-1">
-                    <div className="text-[#8CC1E9]">// Active Editor: src/shaders/liquid.frag</div>
-                    <div>void main() &#123; gl_FragColor = vec4(0.55, 0.76, 0.91, 1.0); &#125;</div>
-                  </div>
-                </div>
-
-                {/* Terminal Window Preview */}
-                <div className={`p-4 rounded-2xl border shadow-lg backdrop-blur-md transition-all ${
-                  isDarkMode ? 'bg-[#0a0d14]/80 border-slate-800 text-slate-300' : 'bg-white/80 border-slate-200 text-slate-700'
-                }`}>
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-800/60 mb-2">
-                    <div className="flex items-center gap-2 text-xs font-mono">
-                      <Terminal size={13} className="text-emerald-400" />
-                      <span>PowerShell · Horizon Daemon</span>
-                    </div>
-                    <span className="text-[10px] font-mono text-emerald-400">PORT 4100 / 4200 OK</span>
-                  </div>
-                  <div className="font-mono text-[11px] text-slate-400">
-                    <div>$ project-horizon --listen 4100 --ws /ws/hud</div>
-                    <div className="text-emerald-400/90">✓ FTS5 Indexer synchronized 10,000+ files (1.05ms)</div>
-                    <div className="text-[#8CC1E9]">✓ Safety Gate Chokepoint Active (Zero VIPI bypass)</div>
-                  </div>
-                </div>
+                ))}
               </div>
+
+              {/* When chat is dismissed: Prompt user to re-summon */}
+              {!isChatVisible && (
+                <div className="mx-auto my-auto flex flex-col items-center gap-3 text-center animate-fade-in p-6">
+                  <div className="w-12 h-12 rounded-3xl bg-gradient-to-tr from-[#12284B] via-[#0055A0] to-[#8CC1E9] flex items-center justify-center text-[#FFF8E7] shadow-xl shadow-[#0055A0]/25 border border-[#FFF8E7]/40 mb-1">
+                    <GeminiSparkle size={24} />
+                  </div>
+                  <div className="text-sm font-semibold horizon-gradient-text">
+                    Project Horizon Desktop Agent
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                    <span>Press</span>
+                    <kbd className="px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-carbon-800 font-mono font-bold text-[#0055A0] dark:text-[#8CC1E9]">
+                      Ctrl + Shift + C
+                    </kbd>
+                    <span>or click below to summon chat</span>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsChatVisible(true);
+                    }}
+                    className="mt-2 px-4 py-2 rounded-2xl text-xs font-bold bg-gradient-to-r from-[#0055A0] via-[#438BC4] to-[#8CC1E9] text-[#FFF8E7] shadow-lg shadow-[#438BC4]/30 hover:brightness-110 transition-all border border-[#FFF8E7]/30 flex items-center gap-2"
+                  >
+                    <GeminiSparkle size={14} />
+                    <span>Summon Horizon Chat</span>
+                  </button>
+                </div>
+              )}
 
               {/* DOCKED AT THE BOTTOM: Agent Thinking HUD (Logs) & Chat Component directly above Taskbar */}
               <div className="w-full max-w-2xl mx-auto flex flex-col items-center gap-3 pt-6 pb-2 z-30">
                 {/* Agent Thinking & Logs: Collapsed by Default with "View Logs" / "Collapse Logs" Toggle */}
-                {(sessionState?.status === 'working' || sessionState?.status === 'done' || sessionState?.status === 'error' || isExecuting || true) && (
-                  <div className="w-full flex flex-col items-center gap-2 animate-fade-in">
+                {(sessionState?.status === 'working' || sessionState?.status === 'done' || sessionState?.status === 'error' || isExecuting || (liveTraceSteps && liveTraceSteps.length > 0)) && (
+                  <div className="w-full flex flex-col items-center gap-2 animate-fade-in" onClick={(e) => e.stopPropagation()}>
                     {/* Expanded ReAct Trace Panel (Only when user expands logs) */}
                     {isTraceExpanded && (
                       <div className="w-full max-h-72 overflow-y-auto mb-1 animate-slide-up shadow-2xl">
@@ -393,42 +568,30 @@ export default function App() {
 
                 {/* The Chat Component (Docked just above the taskbar) */}
                 {isChatVisible && (
-                  <div className="w-full animate-fade-in">
+                  <div className="w-full animate-fade-in" onClick={(e) => e.stopPropagation()}>
                     <ContextualPromptBar
                       isDarkMode={isDarkMode}
-                      attachment={attachedArea}
+                      attachments={attachments}
+                      onRemoveAttachment={handleRemoveAttachment}
+                      onClearAttachments={handleClearAttachments}
                       onTriggerLasso={() => setIsCaptureActive(true)}
-                      onClearAttachment={() => setAttachedArea(null)}
-                      onSubmitPrompt={async (prompt, attachment) => {
-                        const fullPrompt = attachment
-                          ? `[Target Screen Crop ${attachment.coords ? `(${attachment.coords.x}, ${attachment.coords.y}, ${attachment.coords.w}, ${attachment.coords.h})` : ''}]: ${prompt}`
-                          : prompt;
-                        setAttachedArea(null);
-                        if (isConnected) {
-                          try {
-                            await dispatchTask(fullPrompt);
-                          } catch (e) {
-                            console.error('Task execution error:', e);
-                          }
-                        }
-                      }}
+                      onTriggerFullScreen={handleQuickFullScreenCapture}
+                      onSubmitPrompt={handleTaskSubmit}
                     />
                   </div>
                 )}
               </div>
             </div>
 
-            {/* FULL-SCREEN DXGI CAPTURE OVERLAY (When user triggers lasso to circle an area) */}
+            {/* FULL-SCREEN SCREEN CAPTURE OVERLAY (When user triggers lasso or capture) */}
             {isCaptureActive && (
               <div className="absolute inset-0 z-40 bg-black/60 backdrop-blur-sm p-4 flex items-center justify-center animate-fade-in">
                 <div className="w-full max-w-4xl relative">
                   <CaptureOverlayCanvas
                     isDarkMode={isDarkMode}
                     onExit={() => setIsCaptureActive(false)}
-                    onAttachArea={(coords) => {
-                      setAttachedArea({ label: 'Selected Area', coords });
-                      setIsCaptureActive(false);
-                      setIsChatVisible(true);
+                    onAttachArea={(data) => {
+                      handleAddAttachment(data);
                     }}
                   />
                   <button
@@ -463,7 +626,7 @@ export default function App() {
                   className={`p-2 rounded-xl transition-all ${
                     isCaptureActive ? 'bg-[#8CC1E9]/30 text-[#0055A0] dark:text-[#8CC1E9]' : 'hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500'
                   }`}
-                  title="DXGI Freeze Frame"
+                  title="Screen Capture"
                 >
                   <Camera size={16} />
                 </button>
@@ -563,7 +726,7 @@ export default function App() {
             id="comp-capture"
             spec="§5.1"
             title="Capture Overlay Canvas"
-            description="DXGI frozen screen buffer featuring smooth Catmull-Rom neon curve (#8CC1E9 -> #438BC4 -> #0055A0 -> #FFF8E7), dashed celestial cyan AABB with 12px padding, and coordinate overlay."
+            description="Screen capture buffer featuring smooth Catmull-Rom neon curve (#8CC1E9 -> #438BC4 -> #0055A0 -> #FFF8E7), dashed celestial cyan AABB with 12px padding, and coordinate overlay."
             isDarkMode={isDarkMode}
           >
             <CaptureOverlayCanvas isDarkMode={isDarkMode} />
