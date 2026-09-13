@@ -1,33 +1,80 @@
+# Project Horizon specific ignores
 project-horizon.md
 /ui
 
 # Dependencies
 node_modules/
-frontend/node_modules/
-backend/agent-service/node_modules/
+**/node_modules/
+.pnpm-store/
 .venv/
-backend/perception-service/.venv/
+**/.venv/
+env/
+venv/
+ENV/
 
-# Build outputs
+# Build & Bundler outputs
 dist/
 dist-electron/
-frontend/dist/
-backend/agent-service/dist/
+**/dist/
+build/
+**/build/
+out/
+.vite/
+**/.vite/
+.turbo/
 
-# SQLite databases
+# Generated TypeScript declarations & artifacts in shared
+shared/*.js
+shared/*.d.ts
+*.tsbuildinfo
+
+# SQLite databases & temp files
 *.db
 *.db-journal
 *.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
 
-# Python caches
+# Python artifacts & caches
 __pycache__/
+**/__pycache__/
 *.py[cod]
+*$py.class
+*.egg-info/
+**/*.egg-info/
 .pytest_cache/
-backend/perception-service/.pytest_cache/
-backend/perception-service/__pycache__/
+**/.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
-# OS and IDE
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment & Secrets (DPAPI / Windows Credential Manager used instead)
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.cert
+
+# Operating System & IDE
 .DS_Store
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
 .vscode/
 .idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
