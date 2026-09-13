@@ -90,7 +90,7 @@ export class AuditDatabase {
 
   public createSession(session: AuditSession): void {
     const stmt = this.db.prepare(`
-      INSERT INTO sessions (session_id, task_prompt, start_time, outcome, crop_metadata)
+      INSERT OR REPLACE INTO sessions (session_id, task_prompt, start_time, outcome, crop_metadata)
       VALUES (?, ?, ?, ?, ?)
     `);
     stmt.run(

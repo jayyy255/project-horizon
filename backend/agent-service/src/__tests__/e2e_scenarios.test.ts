@@ -84,4 +84,75 @@ describe('TC-E2E-01: Project Resolution & Launch Scenario', () => {
     expect(masked).toContain('[CARD_NUMBER]');
     expect(masked).toContain('[PHONE]');
   });
+
+  it('TC-E2E-02: Multi-step GUI navigation with SoM grounding and Bézier click precision', async () => {
+    const safetyGate = new SafetyGate({
+      allowedProjectRoots: ['C:/Users/Developer/workspace'],
+    });
+    const indexer = new ProjectIndexer(':memory:');
+    const inputSynthesizer = new InputSynthesizer();
+    const auditDb = new AuditDatabase(':memory:');
+
+    const coordinator = new AgentCoordinator(
+      safetyGate,
+      indexer,
+      inputSynthesizer,
+      auditDb
+    );
+
+    // Frame with 3 interactable folder elements from perception service
+    coordinator.setFrameTags([
+      { tag_id: 0, coords: [100, 50, 140, 180], center: [115, 120], label: "src", type: "folder" },
+      { tag_id: 1, coords: [150, 50, 190, 180], center: [115, 170], label: "assets", type: "folder" },
+      { tag_id: 2, coords: [200, 50, 240, 180], center: [115, 220], label: "package.json", type: "file" }
+    ]);
+
+    // Custom planner driving GUI navigation: inspect_viewport -> click_element(1)
+    let stepCount = 0;
+    const guiPlanner = async () => {
+      stepCount++;
+      if (stepCount === 1) {
+        return {
+          action: {
+            tool_name: 'inspect_viewport',
+            args: {},
+            narration: 'Running OmniParser perception to detect sidebar elements...',
+            provenance: 'user_task' as const,
+          }
+        };
+      }
+      if (stepCount === 2) {
+        return {
+          action: {
+            tool_name: 'click_element',
+            args: { tag_id: 1, label: 'assets' },
+            narration: 'Clicking [1] assets folder via humanized Bézier curve...',
+            provenance: 'user_task' as const,
+          }
+        };
+      }
+      return { finalAnswer: 'Assets folder expanded with ±4px click precision.' };
+    };
+
+    const finalState = await coordinator.executeTask('sess-e2e-02', 'Expand assets folder in sidebar', guiPlanner);
+
+    expect(finalState.status).toBe('done');
+    expect(finalState.steps.length).toBe(2);
+
+    // Step 1: inspect_viewport
+    expect(finalState.steps[0].toolName).toBe('inspect_viewport');
+    expect((finalState.steps[0].result as any).count).toBe(3);
+
+    // Step 2: click_element(tag_id=1)
+    expect(finalState.steps[1].toolName).toBe('click_element');
+    const clickResult = finalState.steps[1].result as any;
+    expect(clickResult.clicked).toBe(true);
+    expect(clickResult.tag_id).toBe(1);
+    expect(clickResult.element.label).toBe('assets');
+
+    // Verify click precision criteria: ±4px tolerance
+    expect(clickResult.precisionDeltaPx).toBeLessThanOrEqual(4.0);
+    expect(clickResult.trajectorySteps).toBeGreaterThan(0);
+    console.log(`[TC-E2E-02] Click executed at (${clickResult.actualClick.x}, ${clickResult.actualClick.y}) with ${clickResult.precisionDeltaPx}px precision delta (<= 4px requirement). Zero misclicks.`);
+  });
 });

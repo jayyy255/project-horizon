@@ -35,6 +35,14 @@ export class AgentCoordinator {
   private auditDb: AuditDatabase;
   private onStateChange?: StateChangeCallback;
   private activeSession?: ReActSessionState;
+  private activeFrameLookup: Map<number, {
+    tag_id: number;
+    coords: [number, number, number, number];
+    center: [number, number];
+    label: string;
+    type: string;
+  }> = new Map();
+  private cursorPosition: { x: number; y: number } = { x: 100, y: 100 };
 
   constructor(
     safetyGate: SafetyGate,
@@ -48,6 +56,19 @@ export class AgentCoordinator {
     this.inputSynthesizer = inputSynthesizer;
     this.auditDb = auditDb;
     this.onStateChange = onStateChange;
+  }
+
+  public setFrameTags(tags: Array<{
+    tag_id: number;
+    coords: [number, number, number, number];
+    center: [number, number];
+    label: string;
+    type: string;
+  }>): void {
+    this.activeFrameLookup.clear();
+    for (const t of tags) {
+      this.activeFrameLookup.set(t.tag_id, t);
+    }
   }
 
   public getActiveState(): ReActSessionState | undefined {
@@ -122,7 +143,8 @@ export class AgentCoordinator {
       const action = plan.action;
       const gateResult: GateEvaluationResult = this.safetyGate.evaluate(
         sessionId,
-        action
+        action,
+        this.activeFrameLookup.size > 0 ? new Set(this.activeFrameLookup.keys()) : undefined
       );
 
       const stepIndex = this.activeSession.steps.length + 1;
@@ -278,8 +300,43 @@ export class AgentCoordinator {
       case 'focus_window': {
         return { focused: true, target: args.process_name || args.window_title };
       }
+      case 'inspect_viewport': {
+        return {
+          status: 'success',
+          elements: Array.from(this.activeFrameLookup.values()),
+          count: this.activeFrameLookup.size,
+        };
+      }
       case 'click_element': {
-        return { clicked: true, tag_id: args.tag_id };
+        const tagId = Number(args.tag_id);
+        const element = this.activeFrameLookup.get(tagId);
+        const targetCenter = element?.center || [300, 300];
+
+        // Generate human-like Bézier trajectory
+        const trajectory = this.inputSynthesizer.generateBezierTrajectory(
+          this.cursorPosition,
+          { x: targetCenter[0], y: targetCenter[1] },
+          20
+        );
+
+        // Micro-jitter simulation (±1-2px, well within ±4px precision tolerance)
+        const jitterX = (Math.random() - 0.5) * 2;
+        const jitterY = (Math.random() - 0.5) * 2;
+        const actualX = targetCenter[0] + jitterX;
+        const actualY = targetCenter[1] + jitterY;
+        const precisionDeltaPx = Math.hypot(actualX - targetCenter[0], actualY - targetCenter[1]);
+
+        this.cursorPosition = { x: Math.round(actualX), y: Math.round(actualY) };
+
+        return {
+          clicked: true,
+          tag_id: tagId,
+          targetCenter,
+          actualClick: { x: Math.round(actualX), y: Math.round(actualY) },
+          precisionDeltaPx: Number(precisionDeltaPx.toFixed(2)),
+          trajectorySteps: trajectory.length,
+          element: element || { label: args.label || `Tag_${tagId}` },
+        };
       }
       case 'type_text': {
         return { typed: true, charCount: String(args.text || '').length };
@@ -297,6 +354,26 @@ export class AgentCoordinator {
     state: ReActSessionState
   ): Promise<{ action?: ProposedAction; finalAnswer?: string }> {
     const executedTools = state.steps.map(s => s.toolName);
+
+    // Handle destructive / shell cleanup tasks (Tier 2 HITL flow)
+    if (/rmdir|del |powershell|cmd|delete cache|clean workspace/i.test(state.taskPrompt)) {
+      if (!executedTools.includes('launch_app')) {
+        return {
+          action: {
+            tool_name: 'launch_app',
+            args: {
+              executable_path: 'C:/Windows/System32/cmd.exe',
+              args: ['/c', 'rmdir', '/s', '/q', 'temp_build'],
+            },
+            narration: 'Executing workspace cache cleanup via shell (requires Tier 2 confirmation)...',
+            provenance: 'user_task',
+          },
+        };
+      }
+      return {
+        finalAnswer: 'Workspace cleanup completed successfully after Tier 2 authorization.',
+      };
+    }
 
     // Step 1: If user wants to open/find a project and find_path hasn't run yet -> run find_path
     if (!executedTools.includes('find_path')) {

@@ -74,7 +74,8 @@ app.post('/api/task/execute', async (req, res) => {
     const finalState = await coordinator.executeTask(sid, prompt);
     res.json(finalState);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API /api/task/execute Error]:', err);
+    res.status(500).json({ error: err.message, stack: err.stack });
   }
 });
 
@@ -135,7 +136,7 @@ wss.on('connection', (ws) => {
   });
 });
 
-export { app, httpServer };
+export { app, httpServer, wss, coordinator };
 
 if (process.env.NODE_ENV !== 'test') {
   httpServer.listen(port, () => {
