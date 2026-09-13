@@ -1,0 +1,33 @@
+project-horizon.md
+/ui
+
+# Dependencies
+node_modules/
+frontend/node_modules/
+backend/agent-service/node_modules/
+.venv/
+backend/perception-service/.venv/
+
+# Build outputs
+dist/
+dist-electron/
+frontend/dist/
+backend/agent-service/dist/
+
+# SQLite databases
+*.db
+*.db-journal
+*.db-wal
+
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+backend/perception-service/.pytest_cache/
+backend/perception-service/__pycache__/
+
+# OS and IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

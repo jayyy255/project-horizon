@@ -1,0 +1,54 @@
+{
+  "name": "project-horizon",
+  "version": "1.0.0",
+  "description": "System-Wide Multimodal Desktop & GUI Agent for Windows",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:agent": "npm run dev --prefix backend/agent-service",
+    "dev:perception": "powershell -Command \"cd backend/perception-service; .venv/Scripts/uvicorn server:app --port 4200\"",
+    "dev:all": "concurrently -k -n \"FE,AGENT,PERCEPT\" -c \"cyan,blue,magenta\" \"npm run dev:frontend\" \"npm run dev:agent\" \"npm run dev:perception\"",
+    "build:frontend": "npm run build --prefix frontend",
+    "build:agent": "npm run build --prefix backend/agent-service",
+    "build:all": "npm run build:frontend && npm run build:agent",
+    "test:frontend": "npm run test --prefix frontend",
+    "test:agent": "npm run test --prefix backend/agent-service",
+    "test:perception": "powershell -Command \"cd backend/perception-service; .venv/Scripts/pytest -v\"",
+    "test:all": "npm run test:frontend && npm run test:agent && npm run test:perception",
+    "security-check": "npm audit && npm audit --prefix frontend && npm audit --prefix backend/agent-service"
+  },
+  "keywords": [
+    "desktop-agent",
+    "computer-use",
+    "gemini",
+    "react",
+    "electron"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "lucide-react": "^1.45.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/container-queries": "^0.1.1",
+    "@tailwindcss/forms": "^0.5.11",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^26.5.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "autoprefixer": "^10.6.0",
+    "concurrently": "^10.0.5",
+    "electron": "^44.3.0",
+    "jsdom": "^29.1.1",
+    "postcss": "^8.5.28",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.0",
+    "wait-on": "^9.1.0"
+  }
+}
