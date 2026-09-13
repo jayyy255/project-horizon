@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import App from '../App';
 
 describe('Project Horizon Frontend E2E User Journey & Safety Gating Flows', () => {
-  it('Flow 1: Interacts with the Contextual Prompt Bar and dispatches tasks', () => {
+  it('Flow 1: Interacts with the Contextual Prompt Bar in Desktop Cockpit and dispatches tasks', () => {
     render(<App />);
 
     const input = screen.getByPlaceholderText('Ask Gemini to inspect, refactor, or automate...');
@@ -18,8 +18,12 @@ describe('Project Horizon Frontend E2E User Journey & Safety Gating Flows', () =
     expect(screen.getByText(/Dispatched task to Gemini 2.5/i)).toBeDefined();
   });
 
-  it('Flow 2: Interacts with the State Machine Controller tokens and state transitions', () => {
+  it('Flow 2: Interacts with the State Machine Controller tokens in Studio view', () => {
     render(<App />);
+
+    // Switch to Component Studio
+    const studioBtn = screen.getByText('Component Studio');
+    fireEvent.click(studioBtn);
 
     // Click "Risk (Ivory)" state token
     const riskBtn = screen.getByText('Risk (Ivory)');
@@ -33,7 +37,7 @@ describe('Project Horizon Frontend E2E User Journey & Safety Gating Flows', () =
     expect(idleBtn).toBeDefined();
   });
 
-  it('Flow 3: E2E Tier 2 HITL Security Modal trigger and dismissal flows', () => {
+  it('Flow 3: E2E Tier 2 HITL Security Modal trigger and dismissal flows in Desktop Cockpit', () => {
     render(<App />);
 
     // Trigger Tier 2 modal
@@ -42,18 +46,22 @@ describe('Project Horizon Frontend E2E User Journey & Safety Gating Flows', () =
 
     // Verify modal elements are visible
     const modalHeaders = screen.getAllByText('Review Destructive File Modification');
-    expect(modalHeaders.length).toBeGreaterThanOrEqual(2); // One in component showcase, one in floating overlay
+    expect(modalHeaders.length).toBeGreaterThanOrEqual(1);
 
     // Click Deny Execution to dismiss floating modal
-    const denyBtns = screen.getAllByText('Deny Execution');
-    fireEvent.click(denyBtns[denyBtns.length - 1]);
+    const denyBtn = screen.getByText('Deny Execution');
+    fireEvent.click(denyBtn);
 
-    // Verify floating modal closed (back to 1 in showcase)
-    expect(screen.getAllByText('Review Destructive File Modification').length).toBe(1);
+    // Verify modal closed
+    expect(screen.queryByText('Review Destructive File Modification')).toBeNull();
   });
 
-  it('Flow 4: First-Run Consent Modal acceptance lifecycle', () => {
+  it('Flow 4: First-Run Consent Modal acceptance lifecycle from Desktop Cockpit', () => {
     render(<App />);
+
+    // Open Privacy Agreement / Consent Modal from footer link
+    const consentLink = screen.getByText('Privacy Agreement');
+    fireEvent.click(consentLink);
 
     // Check for First-Run Consent Modal
     expect(screen.getByText('Google Gemini Multimodal Authorization')).toBeDefined();
@@ -69,12 +77,16 @@ describe('Project Horizon Frontend E2E User Journey & Safety Gating Flows', () =
     const enableBtn = screen.getByText('Enable Agent');
     fireEvent.click(enableBtn);
 
-    // Status updates to enabled
-    expect(screen.getByText('Gemini Enabled ✓')).toBeDefined();
+    // Consent modal completes and dismisses
+    expect(screen.queryByText('Google Gemini Multimodal Authorization')).toBeNull();
   });
 
   it('Flow 5: Settings and preferences suite tab switching and hotkey cycling', () => {
     render(<App />);
+
+    // Open Settings Suite from taskbar tray button
+    const settingsBtn = screen.getByTitle('Open Preferences & Controls');
+    fireEvent.click(settingsBtn);
 
     // Hotkey default check
     expect(screen.getByText('Win + Shift + C')).toBeDefined();

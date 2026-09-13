@@ -3,14 +3,19 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import App from '../App';
 
 describe('Project Horizon Frontend Suite', () => {
-  it('renders master header with Horizon title and tag', () => {
+  it('renders master header with Horizon title, desktop cockpit, and controls', () => {
     render(<App />);
     expect(screen.getAllByText('Project Horizon').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Celestial & Cosmic Suite')).toBeDefined();
+    expect(screen.getByText('Desktop Agent Cockpit')).toBeDefined();
+    expect(screen.getByText('Component Studio')).toBeDefined();
   });
 
-  it('renders all 10 component cards from specification', () => {
+  it('renders all 10 component cards from specification in Component Studio view', () => {
     render(<App />);
+    const studioBtn = screen.getByText('Component Studio');
+    fireEvent.click(studioBtn);
+
     expect(screen.getByText('Capture Overlay Canvas')).toBeDefined();
     expect(screen.getByText('Contextual Prompt Input Bar')).toBeDefined();
     expect(screen.getByText('HUD Collapsed State Chip')).toBeDefined();
@@ -31,7 +36,7 @@ describe('Project Horizon Frontend Suite', () => {
     expect(themeButton.textContent).toContain('Dark Mode');
   });
 
-  it('allows simulating the Tier 2 security modal interrupter', () => {
+  it('allows simulating the Tier 2 security modal interrupter in Desktop Cockpit', () => {
     render(<App />);
     const simulateButton = screen.getByText('Simulate Tier 2 Interrupter');
     fireEvent.click(simulateButton);
