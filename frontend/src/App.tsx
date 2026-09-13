@@ -4,19 +4,51 @@ import { ComponentCard } from './components/ComponentCard';
 import { CaptureOverlayCanvas } from './components/CaptureOverlayCanvas';
 import { ContextualPromptBar } from './components/ContextualPromptBar';
 import { HUDCollapsedChip } from './components/HUDCollapsedChip';
-import { ReActTracePanel } from './components/ReActTracePanel';
+import { ReActTracePanel, TraceStep } from './components/ReActTracePanel';
 import { Tier2Modal } from './components/Tier2Modal';
 import { SystemTrayPopover } from './components/SystemTrayPopover';
 import { FirstRunConsentModal } from './components/FirstRunConsentModal';
 import { SettingsPreferencesSuite } from './components/SettingsPreferencesSuite';
 import { SessionHistoryDrawer } from './components/SessionHistoryDrawer';
 import { StateMachineTokenKit } from './components/StateMachineTokenKit';
-import { Sun, Moon, Layers, Shield } from 'lucide-react';
+import { Sun, Moon, Layers, Shield, Wifi, WifiOff } from 'lucide-react';
+import { useHorizonAgent } from './hooks/useHorizonAgent';
 
 export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [activeTabFilter, setActiveTabFilter] = useState("all");
   const [showTier2Modal, setShowTier2Modal] = useState(false);
+  
+  const {
+    isConnected,
+    sessionState,
+    isExecuting,
+    dispatchTask,
+    submitTier2Decision,
+  } = useHorizonAgent();
+
+  // Automatically trigger Tier 2 Modal when backend signals awaiting_tier2
+  useEffect(() => {
+    if (sessionState?.status === 'awaiting_tier2' && sessionState.pendingTier2) {
+      setShowTier2Modal(true);
+    }
+  }, [sessionState?.status, sessionState?.pendingTier2]);
+
+  const liveTraceSteps: TraceStep[] | undefined = sessionState?.steps?.length
+    ? sessionState.steps.map((s) => ({
+        id: s.stepIndex,
+        toolName: s.toolName,
+        duration: s.durationMs ? `${Math.round(s.durationMs)}ms` : 'active',
+        status: s.status,
+        params: Object.fromEntries(
+          Object.entries(s.args || {}).map(([k, v]) => [
+            k,
+            typeof v === 'object' ? JSON.stringify(v) : String(v),
+          ])
+        ),
+        reasoning: s.reasoning || s.narration,
+      }))
+    : undefined;
 
   const componentList = [
     { id: "comp-capture", spec: "§5.1", label: "Capture Overlay" },
@@ -104,6 +136,19 @@ export default function App() {
 
           {/* Quick Actions */}
           <div className="flex items-center gap-2.5">
+            {/* Live Backend Connection Status */}
+            <div
+              className={`px-3 py-1.5 rounded-2xl text-[11px] font-mono flex items-center gap-2 border transition-all ${
+                isConnected
+                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.15)]'
+                  : 'border-slate-700 bg-carbon-800 text-slate-400'
+              }`}
+              title={isConnected ? 'Connected to Agent Service on port 4100' : 'Agent Service offline'}
+            >
+              {isConnected ? <Wifi size={13} className="text-emerald-400" /> : <WifiOff size={13} className="text-slate-500" />}
+              <span>{isConnected ? 'Backend: Connected (4100)' : 'Backend: Standalone'}</span>
+            </div>
+
             <button
               onClick={() => setShowTier2Modal(true)}
               className="px-3.5 py-2 rounded-2xl text-xs font-semibold border border-amber-400/40 text-amber-500 dark:text-amber-400 hover:bg-amber-400/10 flex items-center gap-1.5 transition-all"
@@ -180,7 +225,18 @@ export default function App() {
           description="Floating liquid glass pill with Cosmic Ivory 4-point sparkle (#FFF8E7), multi-stop cobalt & celestial gradient query dispatch button, and soft suggested follow-up chips."
           isDarkMode={isDarkMode}
         >
-          <ContextualPromptBar isDarkMode={isDarkMode} />
+          <ContextualPromptBar 
+            isDarkMode={isDarkMode} 
+            onSubmitPrompt={async (prompt) => {
+              if (isConnected) {
+                try {
+                  await dispatchTask(prompt);
+                } catch (e) {
+                  console.error('Error executing task:', e);
+                }
+              }
+            }}
+          />
         </ComponentCard>
 
         {/* 3. §5.3 HUD COLLAPSED STATE CHIP */}
@@ -191,7 +247,10 @@ export default function App() {
           description="Google Gemini-inspired floating pill with celestial cyan, cerulean, cobalt & cosmic ivory traveling shimmer border, glowing spark indicator, and execution narration."
           isDarkMode={isDarkMode}
         >
-          <HUDCollapsedChip isDarkMode={isDarkMode} />
+          <HUDCollapsedChip 
+            isDarkMode={isDarkMode} 
+            currentNarration={sessionState?.currentNarration}
+          />
         </ComponentCard>
 
         {/* 4. §5.4 HUD EXPANDED REACT TRACE PANEL */}
@@ -202,7 +261,10 @@ export default function App() {
           description="Multimodal agent execution tree featuring celestial cyan/cosmic ivory status nodes, timing telemetry, tool parameters, and Gemini reasoning disclosures."
           isDarkMode={isDarkMode}
         >
-          <ReActTracePanel isDarkMode={isDarkMode} />
+          <ReActTracePanel 
+            isDarkMode={isDarkMode} 
+            steps={liveTraceSteps}
+          />
         </ComponentCard>
 
         {/* 5. §5.5 TIER 2 CONFIRMATION MODAL */}
@@ -273,13 +335,24 @@ export default function App() {
 
       </main>
 
-      {/* Floating Tier 2 Modal (when simulated) */}
+      {/* Floating Tier 2 Modal (when simulated or triggered by backend) */}
       {showTier2Modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
           <Tier2Modal 
             isDarkMode={isDarkMode} 
-            onAuthorize={() => setShowTier2Modal(false)}
-            onDeny={() => setShowTier2Modal(false)}
+            payload={sessionState?.pendingTier2}
+            onAuthorize={() => {
+              if (sessionState?.pendingTier2) {
+                submitTier2Decision(sessionState.pendingTier2.actionId, true);
+              }
+              setShowTier2Modal(false);
+            }}
+            onDeny={() => {
+              if (sessionState?.pendingTier2) {
+                submitTier2Decision(sessionState.pendingTier2.actionId, false);
+              }
+              setShowTier2Modal(false);
+            }}
           />
         </div>
       )}
