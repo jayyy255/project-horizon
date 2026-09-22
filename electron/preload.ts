@@ -1,7 +1,23 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { Tier2ActionPayload } from '../shared/types';
 
+export interface DesktopCaptureData {
+  dataUrl: string;
+  width: number;
+  height: number;
+  scaleFactor: number;
+  sourceId: string;
+  displayLabel: string;
+}
+
 contextBridge.exposeInMainWorld('horizonAPI', {
+  captureDesktop: (): Promise<DesktopCaptureData> => ipcRenderer.invoke('horizon:capture-desktop'),
+  getDesktopSources: () => ipcRenderer.invoke('horizon:get-desktop-sources'),
+  onDesktopCaptured: (callback: (data: DesktopCaptureData) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: DesktopCaptureData) => callback(data);
+    ipcRenderer.on('horizon:desktop-captured', handler);
+    return () => ipcRenderer.removeListener('horizon:desktop-captured', handler);
+  },
   toggleOverlay: () => ipcRenderer.invoke('horizon:toggle-overlay'),
   closeOverlay: () => ipcRenderer.invoke('horizon:close-overlay'),
   onOverlayToggled: (callback: (visible: boolean) => void) => {

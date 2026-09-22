@@ -43,6 +43,10 @@ export default function App() {
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
 
+  // Real Desktop Screenshot state from Electron desktopCapturer
+  const [realScreenshotUrl, setRealScreenshotUrl] = useState<string | null>(null);
+  const [captureDisplayInfo, setCaptureDisplayInfo] = useState<{ width: number; height: number; scaleFactor?: number; label?: string } | null>(null);
+
   // Screen attachments & chat visibility
   const [attachments, setAttachments] = useState<ScreenAttachment[]>([]);
   const [isChatVisible, setIsChatVisible] = useState(true);
@@ -80,13 +84,61 @@ export default function App() {
     }
   }, [sessionState?.status, sessionState?.pendingTier2]);
 
+  // Listen for real desktop capture broadcasts from Electron main process
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.horizonAPI) {
+      const unsubCapture = window.horizonAPI.onDesktopCaptured((data) => {
+        console.log('[App] Real desktop captured from Electron:', data.width, 'x', data.height);
+        setRealScreenshotUrl(data.dataUrl);
+        setCaptureDisplayInfo({
+          width: data.width,
+          height: data.height,
+          scaleFactor: data.scaleFactor,
+          label: data.displayLabel,
+        });
+        setIsCaptureActive(true);
+        setIsChatVisible(true);
+      });
+
+      const unsubOverlay = window.horizonAPI.onOverlayToggled((visible) => {
+        setIsCaptureActive(visible);
+        if (visible) {
+          setIsChatVisible(true);
+        }
+      });
+
+      return () => {
+        unsubCapture();
+        unsubOverlay();
+      };
+    }
+  }, []);
+
+  const handleTriggerCapture = async () => {
+    if (typeof window !== 'undefined' && window.horizonAPI) {
+      try {
+        const data = await window.horizonAPI.captureDesktop();
+        setRealScreenshotUrl(data.dataUrl);
+        setCaptureDisplayInfo({
+          width: data.width,
+          height: data.height,
+          scaleFactor: data.scaleFactor,
+          label: data.displayLabel,
+        });
+      } catch (err) {
+        console.warn('Could not capture desktop via horizonAPI:', err);
+      }
+    }
+    setIsCaptureActive(true);
+    setIsChatVisible(true);
+  };
+
   // Global Hotkey Listener: Win/Ctrl + Shift + C for Shortcut Summon & Screen Select
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
         e.preventDefault();
-        setIsChatVisible(true);
-        setIsCaptureActive(prev => !prev);
+        handleTriggerCapture();
       }
       if (e.key === 'Escape') {
         setIsCaptureActive(false);
@@ -96,6 +148,9 @@ export default function App() {
         setShowSettingsModal(false);
         setShowConsentModal(false);
         setShowHistoryDrawer(false);
+        if (typeof window !== 'undefined' && window.horizonAPI) {
+          window.horizonAPI.closeOverlay();
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -269,6 +324,26 @@ export default function App() {
       el.scrollIntoView({ behavior: 'smooth' });
     }
   };
+
+  const isCaptureOverlayRoute = typeof window !== 'undefined' && window.location.hash.includes('capture');
+  if (isCaptureOverlayRoute) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px] flex items-center justify-center p-0 m-0 w-screen h-screen overflow-hidden select-none">
+        <CaptureOverlayCanvas
+          isDarkMode={isDarkMode}
+          screenshotUrl={realScreenshotUrl}
+          displayInfo={captureDisplayInfo}
+          onExit={() => {
+            if (typeof window !== 'undefined' && window.horizonAPI) window.horizonAPI.closeOverlay();
+          }}
+          onAttachArea={(data) => {
+            handleAddAttachment(data);
+            if (typeof window !== 'undefined' && window.horizonAPI) window.horizonAPI.closeOverlay();
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={`min-h-screen relative flex flex-col transition-colors duration-500 ${
@@ -589,9 +664,15 @@ export default function App() {
                 <div className="w-full max-w-4xl relative">
                   <CaptureOverlayCanvas
                     isDarkMode={isDarkMode}
-                    onExit={() => setIsCaptureActive(false)}
+                    screenshotUrl={realScreenshotUrl}
+                    displayInfo={captureDisplayInfo}
+                    onExit={() => {
+                      setIsCaptureActive(false);
+                      if (typeof window !== 'undefined' && window.horizonAPI) window.horizonAPI.closeOverlay();
+                    }}
                     onAttachArea={(data) => {
                       handleAddAttachment(data);
+                      if (typeof window !== 'undefined' && window.horizonAPI) window.horizonAPI.closeOverlay();
                     }}
                   />
                   <button
