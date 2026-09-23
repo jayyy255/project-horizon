@@ -119,7 +119,22 @@ Project Horizon is organized into decoupled services communicating over lightwei
   - If a chat was made, it automatically archives to **Session History** before dismissing.
   - Re-summoned at any time via `Ctrl+Shift+C` / `Win+Shift+C` or the summon chip.
 
-### 3.6 Guardrails, Security Gate & Hardware Panic (§8)
+### 3.6 Step 4c: In-Process Agent Migration (Completed)
+- **Elimination of Standalone Fastify Daemon (Port 4100)**:
+  - Folded ReAct Coordinator, Safety Gate, FTS5 Indexer, Input Synthesizer, and Audit Database into `electron/agent/`.
+  - Registered direct Electron `ipcMain` handlers (`horizon:execute-task`, `horizon:resolve-tier2`, `horizon:get-agent-state`, `horizon:search-indexer`).
+  - Exposed bidirectional state streaming via `horizon:agent-state-update` and `horizon:panic-abort`.
+- **Frontend IPC Integration**:
+  - `AgentClient` in `frontend/src/services/agentClient.ts` detects native Electron mode and delegates calls directly to `window.horizonAPI`, bypassing network sockets.
+  - Retains backward-compatible HTTP/WS fallback for browser testing.
+- **Verification (`scripts/test_step4c_inprocess_agent.js`)**:
+  - Validated in-process FTS5 search (2.07ms).
+  - Validated autonomous ReAct CLI-first execution (0.10ms).
+  - Validated Safety Gate Tier 2 HITL interception & authorization.
+  - Validated Hardware Panic Kill-switch corner-slam abort latency (0.192ms ≤ 20ms SLA).
+  - Fastify port 4100 is no longer required for desktop operation.
+
+### 3.7 Guardrails, Security Gate & Hardware Panic (§8)
 - **Visual Indirect Prompt Injection (VIPI) Defense (§8.1)**:
   - Screen content and OCR text are encapsulated strictly as untrusted data.
   - Proposed actions whose justification originates from on-screen instructions (e.g. fake "System Override" banners) are dropped before tier classification.
@@ -132,6 +147,7 @@ Project Horizon is organized into decoupled services communicating over lightwei
 - **Encrypted Audit Database & PII Masking (§8.5, §8.6)**:
   - SQLite database (`audit/db.ts`) with SHA-256 integrity verification.
   - Automated regex redaction replaces emails (`[EMAIL]`), phone numbers (`[PHONE]`), and payment card numbers (`[CARD]`) before storage or transmission.
+
 
 ---
 

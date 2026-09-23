@@ -40,4 +40,24 @@ contextBridge.exposeInMainWorld('horizonAPI', {
   sendTier2Decision: (actionId: string, authorized: boolean) =>
     ipcRenderer.invoke('horizon:tier2-decision', { actionId, authorized }),
   getSystemInfo: () => ipcRenderer.invoke('horizon:get-system-info'),
+
+  // Step 4c: In-process agent coordinator IPC
+  executeTask: (payload: { prompt: string; sessionId?: string }) =>
+    ipcRenderer.invoke('horizon:execute-task', payload),
+  resolveTier2: (payload: { actionId: string; authorized: boolean }) =>
+    ipcRenderer.invoke('horizon:resolve-tier2', payload),
+  getAgentState: () => ipcRenderer.invoke('horizon:get-agent-state'),
+  searchIndexer: (payload: { query: string; limit?: number }) =>
+    ipcRenderer.invoke('horizon:search-indexer', payload),
+  onAgentStateUpdate: (callback: (state: any) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: any) => callback(state);
+    ipcRenderer.on('horizon:agent-state-update', handler);
+    return () => ipcRenderer.removeListener('horizon:agent-state-update', handler);
+  },
+  onPanicAbort: (callback: (panicEvent: any) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, panicEvent: any) => callback(panicEvent);
+    ipcRenderer.on('horizon:panic-abort', handler);
+    return () => ipcRenderer.removeListener('horizon:panic-abort', handler);
+  },
 });
+

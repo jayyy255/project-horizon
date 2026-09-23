@@ -53,6 +53,13 @@ export interface HorizonAPI {
   onTier2Requested: (callback: (payload: Tier2ActionPayload) => void) => () => void;
   sendTier2Decision: (actionId: string, authorized: boolean) => Promise<void>;
   getSystemInfo: () => Promise<SystemInfo>;
+  // In-process ReAct Agent methods (Step 4c)
+  executeTask: (payload: { prompt: string; sessionId?: string }) => Promise<any>;
+  resolveTier2: (payload: { actionId: string; authorized: boolean }) => Promise<any>;
+  getAgentState: () => Promise<any>;
+  searchIndexer: (payload: { query: string; limit?: number }) => Promise<any[]>;
+  onAgentStateUpdate: (callback: (state: any) => void) => () => void;
+  onPanicAbort: (callback: (panicEvent: any) => void) => () => void;
 }
 
 declare global {
@@ -60,3 +67,4 @@ declare global {
     horizonAPI?: HorizonAPI;
   }
 }
+

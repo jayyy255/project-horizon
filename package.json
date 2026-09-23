@@ -18,8 +18,11 @@
     "test:agent": "npm run test --prefix backend/agent-service",
     "test:perception": "powershell -Command \"cd backend/perception-service; .venv/Scripts/pytest -v\"",
     "test:all": "npm run test:frontend && npm run test:agent && npm run test:perception",
+    "test:lasso": "electron scripts/test_interactive_lasso.js",
+    "test:step4c": "npm run build:electron && electron scripts/test_step4c_inprocess_agent.js",
     "security-check": "npm audit && npm audit --prefix frontend && npm audit --prefix backend/agent-service"
   },
+
   "keywords": [
     "desktop-agent",
     "computer-use",

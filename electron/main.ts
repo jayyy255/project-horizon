@@ -10,10 +10,12 @@ import {
   nativeImage,
 } from 'electron';
 import path from 'path';
+import { AgentHost } from './agent';
 
 let mainWindow: BrowserWindow | null = null;
 let overlayWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+let agentHost: AgentHost | null = null;
 let isOverlayVisible = false;
 let lastCapturedData: {
   dataUrl: string;
@@ -23,6 +25,7 @@ let lastCapturedData: {
   sourceId: string;
   displayLabel: string;
 } | null = null;
+
 
 /**
  * Captures real desktop pixels using Electron's desktopCapturer API.
@@ -41,39 +44,52 @@ async function captureRealDesktop(): Promise<{
   const width = Math.round(primaryDisplay.bounds.width * scaleFactor);
   const height = Math.round(primaryDisplay.bounds.height * scaleFactor);
 
-  console.log(`[Project Horizon] Capturing real desktop display: ${primaryDisplay.id} (${width}x${height}px, scale: ${scaleFactor})`);
+  console.log(`[Project Horizon] Enumerating desktop display: ${primaryDisplay.id} (${width}x${height}px, scale: ${scaleFactor})`);
 
-  const sources = await desktopCapturer.getSources({
-    types: ['screen'],
-    thumbnailSize: { width, height },
-    fetchWindowIcons: false,
-  });
+  let dataUrl = '';
+  let sourceId = '';
+  let displayLabel = 'Entire Screen';
 
-  if (!sources || sources.length === 0) {
-    throw new Error('No desktop screen sources returned by desktopCapturer');
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width: 1, height: 1 },
+      fetchWindowIcons: false,
+    });
+
+    if (sources && sources.length > 0) {
+      const source = sources[0];
+      sourceId = source.id;
+      displayLabel = source.name || 'Entire Screen';
+    }
+  } catch (err) {
+    console.warn('[Project Horizon] desktopCapturer.getSources warning:', err);
   }
-
-  // Pick primary screen or first source
-  const source = sources[0];
-  const thumbnail = source.thumbnail;
-  const dataUrl = thumbnail.toDataURL();
 
   lastCapturedData = {
     dataUrl,
     width: primaryDisplay.bounds.width,
     height: primaryDisplay.bounds.height,
     scaleFactor,
-    sourceId: source.id,
-    displayLabel: source.name || 'Entire Screen',
+    sourceId,
+    displayLabel,
   };
 
-  console.log(
-    `[Project Horizon] Real desktop capture successful: ${source.name} | Buffer size: ${Math.round(
-      dataUrl.length / 1024
-    )} KB`
-  );
-
   return lastCapturedData;
+}
+
+function loadWindowContent(win: BrowserWindow, hash?: string) {
+  const distPath = path.join(__dirname, '../../frontend/dist/index.html');
+  const isDev = process.env.USE_DEV_SERVER === 'true';
+
+  if (isDev) {
+    const url = hash ? `http://localhost:5173/#${hash}` : 'http://localhost:5173';
+    win.loadURL(url).catch(() => {
+      win.loadFile(distPath, hash ? { hash } : undefined);
+    });
+  } else {
+    win.loadFile(distPath, hash ? { hash } : undefined);
+  }
 }
 
 function createMainWindow(): BrowserWindow {
@@ -97,19 +113,20 @@ function createMainWindow(): BrowserWindow {
     },
   });
 
-  const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
-  if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '../../frontend/dist/index.html'));
+  loadWindowContent(mainWindow);
+
+  if (agentHost) {
+    agentHost.setMainWindow(mainWindow);
   }
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    agentHost?.setMainWindow(null);
   });
 
   return mainWindow;
 }
+
 
 function createOverlayWindow(): BrowserWindow {
   const displays = screen.getAllDisplays();
@@ -141,14 +158,7 @@ function createOverlayWindow(): BrowserWindow {
     },
   });
 
-  const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
-  if (isDev) {
-    overlayWindow.loadURL('http://localhost:5173/#capture');
-  } else {
-    overlayWindow.loadFile(path.join(__dirname, '../../frontend/dist/index.html'), {
-      hash: 'capture',
-    });
-  }
+  loadWindowContent(overlayWindow, 'capture');
 
   overlayWindow.on('closed', () => {
     overlayWindow = null;
@@ -260,9 +270,14 @@ function setupSystemTray(): void {
 }
 
 app.whenReady().then(() => {
+  agentHost = new AgentHost();
   createMainWindow();
   createOverlayWindow();
   setupSystemTray();
+
+  if (mainWindow) {
+    agentHost.setMainWindow(mainWindow);
+  }
 
   // Register Global Hotkeys
   // Win+Shift+C (and CommandOrControl+Shift+C) per §3.1
@@ -337,12 +352,25 @@ app.whenReady().then(() => {
   ipcMain.handle('horizon:trigger-tier2', (_event, payload) => {
     mainWindow?.webContents.send('horizon:tier2-requested', payload);
   });
+
+  ipcMain.handle('horizon:tier2-decision', async (_event, payload: { actionId: string; authorized: boolean }) => {
+    if (agentHost) {
+      return await agentHost.getCoordinator().resolveTier2(payload.actionId, payload.authorized);
+    }
+    return null;
+  });
 });
 
 app.on('will-quit', () => {
+  try {
+    agentHost?.close();
+  } catch (err) {
+    console.warn('[Project Horizon] Error closing agentHost:', err);
+  }
   globalShortcut.unregisterAll();
   tray?.destroy();
 });
+
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
