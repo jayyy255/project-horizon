@@ -23,7 +23,7 @@ export async function captureRealDesktop(): Promise<DesktopScreenshotResult> {
     throw new Error('No desktop screen sources found.');
   }
 
-  const screenSource = sources.find((s) => s.id.startsWith('screen')) || sources[0];
+  const screenSource = sources.find((s: { id: string; name: string }) => s.id.startsWith('screen')) || sources[0];
 
   // 2. Request real desktop video stream via getUserMedia
   const stream = await navigator.mediaDevices.getUserMedia({

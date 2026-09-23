@@ -309,6 +309,17 @@ app.whenReady().then(() => {
     return false;
   });
 
+  ipcMain.handle('horizon:attach-area', (_event, data) => {
+    console.log('[Project Horizon] Area attached from overlay:', data?.type, data?.coords);
+    mainWindow?.webContents.send('horizon:area-attached', data);
+    hideOverlay();
+    if (mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+    return true;
+  });
+
   ipcMain.handle('horizon:get-system-info', () => {
     const primaryDisplay = screen.getPrimaryDisplay();
     return {

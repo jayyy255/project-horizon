@@ -7,6 +7,7 @@ export interface ScreenAttachment {
   label: string;
   type: 'crop' | 'fullscreen';
   coords?: { x: number; y: number; w: number; h: number };
+  croppedDataUrl?: string;
   timestamp?: number;
 }
 
@@ -73,7 +74,13 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
               key={att.id}
               className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#8CC1E9]/15 border border-[#8CC1E9]/50 text-xs font-mono text-[#0055A0] dark:text-[#8CC1E9] shadow-sm backdrop-blur-md transition-all hover:bg-[#8CC1E9]/25"
             >
-              {att.type === 'crop' ? (
+              {att.croppedDataUrl ? (
+                <img
+                  src={att.croppedDataUrl}
+                  alt="Crop preview"
+                  className="w-5 h-5 rounded-md object-cover border border-[#8CC1E9]/40 shadow-xs"
+                />
+              ) : att.type === 'crop' ? (
                 <Crop size={13} className="text-[#438BC4]" />
               ) : (
                 <Monitor size={13} className="text-[#438BC4]" />

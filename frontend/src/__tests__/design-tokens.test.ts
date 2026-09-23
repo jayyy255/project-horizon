@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+// @ts-expect-error Tailwind config is a JS file without ambient typings
 import tailwindConfig from '../../tailwind.config.js';
 
 describe('Design Tokens — Celestial Cyan, Cobalt & Cosmic Ivory', () => {

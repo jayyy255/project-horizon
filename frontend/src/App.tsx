@@ -23,7 +23,6 @@ import {
   History, 
   Sliders, 
   X,
-  Maximize2,
   Terminal,
   Code2
 } from 'lucide-react';
@@ -107,9 +106,17 @@ export default function App() {
         }
       });
 
+      const unsubArea = window.horizonAPI.onAreaAttached((data) => {
+        console.log('[App] Real region area attached from overlay:', data);
+        handleAddAttachment(data);
+        setIsCaptureActive(false);
+        setIsChatVisible(true);
+      });
+
       return () => {
         unsubCapture();
         unsubOverlay();
+        unsubArea();
       };
     }
   }, []);
@@ -161,12 +168,18 @@ export default function App() {
     setIsDarkMode(prev => !prev);
   };
 
-  const handleAddAttachment = (data: { type: 'crop' | 'fullscreen'; label: string; coords?: { x: number; y: number; w: number; h: number } }) => {
+  const handleAddAttachment = (data: { 
+    type: 'crop' | 'fullscreen'; 
+    label: string; 
+    coords?: { x: number; y: number; w: number; h: number };
+    croppedDataUrl?: string;
+  }) => {
     const newAtt: ScreenAttachment = {
       id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       label: data.label,
       type: data.type,
       coords: data.coords,
+      croppedDataUrl: data.croppedDataUrl,
       timestamp: Date.now()
     };
     setAttachments(prev => [...prev, newAtt]);
@@ -328,17 +341,21 @@ export default function App() {
   const isCaptureOverlayRoute = typeof window !== 'undefined' && window.location.hash.includes('capture');
   if (isCaptureOverlayRoute) {
     return (
-      <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px] flex items-center justify-center p-0 m-0 w-screen h-screen overflow-hidden select-none">
+      <div className="fixed inset-0 z-50 bg-black/90 p-0 m-0 w-screen h-screen overflow-hidden select-none">
         <CaptureOverlayCanvas
           isDarkMode={isDarkMode}
           screenshotUrl={realScreenshotUrl}
           displayInfo={captureDisplayInfo}
+          isFullScreenOverlay={true}
           onExit={() => {
             if (typeof window !== 'undefined' && window.horizonAPI) window.horizonAPI.closeOverlay();
           }}
           onAttachArea={(data) => {
-            handleAddAttachment(data);
-            if (typeof window !== 'undefined' && window.horizonAPI) window.horizonAPI.closeOverlay();
+            if (typeof window !== 'undefined' && window.horizonAPI) {
+              window.horizonAPI.attachArea(data);
+            } else {
+              handleAddAttachment(data);
+            }
           }}
         />
       </div>

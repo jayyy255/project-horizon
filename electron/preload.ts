@@ -25,6 +25,12 @@ contextBridge.exposeInMainWorld('horizonAPI', {
     ipcRenderer.on('horizon:overlay-toggled', handler);
     return () => ipcRenderer.removeListener('horizon:overlay-toggled', handler);
   },
+  attachArea: (data: any) => ipcRenderer.invoke('horizon:attach-area', data),
+  onAreaAttached: (callback: (data: any) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: any) => callback(data);
+    ipcRenderer.on('horizon:area-attached', handler);
+    return () => ipcRenderer.removeListener('horizon:area-attached', handler);
+  },
   triggerTier2: (payload: Tier2ActionPayload) => ipcRenderer.invoke('horizon:trigger-tier2', payload),
   onTier2Requested: (callback: (payload: Tier2ActionPayload) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: Tier2ActionPayload) => callback(payload);

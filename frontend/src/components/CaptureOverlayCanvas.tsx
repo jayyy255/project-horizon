@@ -1,14 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import { RotateCcw, Lasso, Monitor } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { RotateCcw, Lasso, Monitor, Crop, Check } from 'lucide-react';
 import { GeminiSparkle } from './GeminiSparkle';
 import { captureRealDesktop } from '../utils/capture';
+import { computeAABB, generateCatmullRomSVGPath, Point, BoundingBox } from '@shared/aabb';
+
+interface CaptureAreaPayload {
+  type: 'crop' | 'fullscreen';
+  label: string;
+  coords?: { x: number; y: number; w: number; h: number };
+  croppedDataUrl?: string;
+}
 
 interface CaptureOverlayCanvasProps {
   isDarkMode: boolean;
   onExit?: () => void;
-  onAttachArea?: (data: { type: 'crop' | 'fullscreen'; label: string; coords?: { x: number; y: number; w: number; h: number } }) => void;
+  onAttachArea?: (data: CaptureAreaPayload) => void;
   screenshotUrl?: string | null;
   displayInfo?: { width: number; height: number; scaleFactor?: number; label?: string } | null;
+  isFullScreenOverlay?: boolean;
 }
 
 export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({ 
@@ -16,16 +25,35 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
   onExit,
   onAttachArea,
   screenshotUrl,
-  displayInfo
+  displayInfo,
+  isFullScreenOverlay = false
 }) => {
-  const [showAABB, setShowAABB] = useState(true);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+
   const [realScreenshot, setRealScreenshot] = useState<string | null>(screenshotUrl || null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [captureDetails, setCaptureDetails] = useState<{ width: number; height: number; label: string } | null>(
     displayInfo ? { width: displayInfo.width, height: displayInfo.height, label: displayInfo.label || 'Primary Display' } : null
   );
 
-  const simulatedCoords = { x: 1420, y: 860, w: 420, h: 260 };
+  // Interactive Lasso State
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [points, setPoints] = useState<Point[]>([]);
+  const [boundingBox, setBoundingBox] = useState<BoundingBox | null>(null);
+  const [hasDrawn, setHasDrawn] = useState(false);
+
+  // Initial demo coordinates if no freehand drawn yet
+  const defaultDemoPoints: Point[] = [
+    { x: 160, y: 110 },
+    { x: 340, y: 85 },
+    { x: 540, y: 120 },
+    { x: 570, y: 240 },
+    { x: 530, y: 330 },
+    { x: 360, y: 365 },
+    { x: 150, y: 330 },
+    { x: 110, y: 220 },
+  ];
 
   useEffect(() => {
     if (screenshotUrl) {
@@ -38,6 +66,15 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
       setCaptureDetails({ width: displayInfo.width, height: displayInfo.height, label: displayInfo.label || 'Primary Display' });
     }
   }, [displayInfo]);
+
+  // Set default demo lasso on mount if in preview mode
+  useEffect(() => {
+    if (!isFullScreenOverlay && points.length === 0 && !hasDrawn) {
+      setPoints(defaultDemoPoints);
+      const initialAABB = computeAABB(defaultDemoPoints, 12);
+      setBoundingBox(initialAABB);
+    }
+  }, [isFullScreenOverlay]);
 
   // When running inside Electron, grab actual screenshot of the real desktop via desktopCapturer + getUserMedia
   useEffect(() => {
@@ -60,11 +97,166 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
     }
   }, [realScreenshot]);
 
+  // Helper to extract relative cursor coordinates
+  const getRelativeCoords = useCallback((e: React.MouseEvent<HTMLDivElement>): Point | null => {
+    if (!containerRef.current) return null;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = Math.round(e.clientX - rect.left);
+    const y = Math.round(e.clientY - rect.top);
+    return { x, y };
+  }, []);
+
+  // Freehand Lasso Interaction Handlers
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Only left click
+    if (e.button !== 0) return;
+    const pt = getRelativeCoords(e);
+    if (!pt) return;
+
+    setIsDrawing(true);
+    setHasDrawn(true);
+    setPoints([pt]);
+    setBoundingBox(null);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDrawing) return;
+    const pt = getRelativeCoords(e);
+    if (!pt) return;
+
+    setPoints((prev) => {
+      if (prev.length === 0) return [pt];
+      const last = prev[prev.length - 1];
+      const distSq = (pt.x - last.x) ** 2 + (pt.y - last.y) ** 2;
+      // Throttle points: minimum 4px movement to maintain smooth Catmull-Rom curvature
+      if (distSq >= 16) {
+        const next = [...prev, pt];
+        // Compute live AABB while drawing
+        if (containerRef.current) {
+          const rect = containerRef.current.getBoundingClientRect();
+          const liveAABB = computeAABB(next, 12, { width: rect.width, height: rect.height });
+          setBoundingBox(liveAABB);
+        }
+        return next;
+      }
+      return prev;
+    });
+  };
+
+  const handleMouseUp = () => {
+    if (!isDrawing) return;
+    setIsDrawing(false);
+
+    if (points.length >= 3 && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const finalAABB = computeAABB(points, 12, { width: rect.width, height: rect.height });
+      setBoundingBox(finalAABB);
+    }
+  };
+
+  const handleClearLasso = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setPoints([]);
+    setBoundingBox(null);
+    setHasDrawn(false);
+  };
+
+  const handleResetDemoLasso = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setPoints(defaultDemoPoints);
+    setBoundingBox(computeAABB(defaultDemoPoints, 12));
+    setHasDrawn(true);
+  };
+
+  // Crops the real desktop image using an offscreen canvas
+  const createCroppedImage = useCallback(async (cropBox: BoundingBox): Promise<string | undefined> => {
+    if (!realScreenshot || cropBox.w <= 0 || cropBox.h <= 0) return undefined;
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const offscreen = document.createElement('canvas');
+          if (!containerRef.current) {
+            resolve(undefined);
+            return;
+          }
+          const displayRect = containerRef.current.getBoundingClientRect();
+          const scaleX = img.naturalWidth / displayRect.width;
+          const scaleY = img.naturalHeight / displayRect.height;
+
+          const sx = Math.round(cropBox.x * scaleX);
+          const sy = Math.round(cropBox.y * scaleY);
+          const sw = Math.round(cropBox.w * scaleX);
+          const sh = Math.round(cropBox.h * scaleY);
+
+          offscreen.width = Math.max(1, cropBox.w);
+          offscreen.height = Math.max(1, cropBox.h);
+          const ctx = offscreen.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cropBox.w, cropBox.h);
+            resolve(offscreen.toDataURL('image/png'));
+          } else {
+            resolve(undefined);
+          }
+        } catch {
+          resolve(undefined);
+        }
+      };
+      img.onerror = () => resolve(undefined);
+      img.src = realScreenshot;
+    });
+  }, [realScreenshot]);
+
+  const handleAttachSelection = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onAttachArea) return;
+
+    if (boundingBox && boundingBox.w > 0 && boundingBox.h > 0) {
+      const croppedDataUrl = await createCroppedImage(boundingBox);
+      onAttachArea({
+        type: 'crop',
+        label: `Area [${boundingBox.w}×${boundingBox.h}px]`,
+        coords: boundingBox,
+        croppedDataUrl,
+      });
+    } else {
+      handleAttachFullScreen(e);
+    }
+  };
+
+  const handleAttachFullScreen = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onAttachArea) return;
+    const w = captureDetails?.width || (typeof window !== 'undefined' ? window.innerWidth : 1920);
+    const h = captureDetails?.height || (typeof window !== 'undefined' ? window.innerHeight : 1080);
+    onAttachArea({
+      type: 'fullscreen',
+      label: 'Entire Display',
+      coords: { x: 0, y: 0, w, h },
+      croppedDataUrl: realScreenshot || undefined,
+    });
+  };
+
+  const svgPath = points.length >= 2 ? generateCatmullRomSVGPath(points, !isDrawing) : '';
+
   return (
-    <div className="w-full max-w-4xl relative rounded-3xl overflow-hidden border border-[#8CC1E9]/35 dark:border-slate-800 shadow-2xl">
+    <div 
+      className={
+        isFullScreenOverlay 
+          ? 'fixed inset-0 w-screen h-screen z-50 overflow-hidden select-none bg-black/90 cursor-crosshair'
+          : 'w-full max-w-4xl relative rounded-3xl overflow-hidden border border-[#8CC1E9]/35 dark:border-slate-800 shadow-2xl'
+      }
+    >
       {/* Desktop Background Canvas / Real Captured Screenshot */}
       <div 
-        className="w-full h-[460px] relative select-none transition-colors overflow-hidden"
+        ref={containerRef}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        className={`w-full relative select-none transition-colors overflow-hidden ${
+          isFullScreenOverlay ? 'h-screen w-screen' : 'h-[460px] cursor-crosshair'
+        }`}
         style={{
           background: isDarkMode 
             ? 'radial-gradient(ellipse at 60% 40%, #12284B 0%, #090a0d 100%)' 
@@ -74,6 +266,7 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
         {/* Real Captured Desktop Bitmap (Actual live desktop pixels) */}
         {realScreenshot ? (
           <img 
+            ref={imgRef}
             src={realScreenshot} 
             alt="Real Desktop Capture" 
             className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none brightness-95 animate-fade-in"
@@ -90,7 +283,7 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
         )}
 
         {/* Real Screen Capture Indicator Badge */}
-        <div className="absolute top-4 left-4 z-20 flex items-center gap-2.5">
+        <div className="absolute top-4 left-4 z-20 flex items-center gap-2.5 pointer-events-none">
           <span className="flex h-2.5 w-2.5 relative">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#8CC1E9] opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-gradient-to-r from-[#8CC1E9] via-[#438BC4] to-[#FFF8E7]"></span>
@@ -103,83 +296,94 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
               {isCapturing ? (
                 'Capturing real Windows desktop...'
               ) : realScreenshot && captureDetails ? (
-                `Real Desktop Captured · ${captureDetails.width}×${captureDetails.height}px (${captureDetails.label})`
+                `Desktop Capture · ${captureDetails.width}×${captureDetails.height}px (${captureDetails.label})`
               ) : (
-                'Screen Capture Active · Select or Circle Area'
+                'Lasso Active · Click & Drag anywhere to circle'
               )}
             </span>
           </span>
         </div>
 
-        {/* SVG Catmull-Rom Smooth Neon Lasso Curve: #8CC1E9 -> #438BC4 -> #0055A0 -> #FFF8E7 */}
-        {showAABB && (
-          <svg className="absolute inset-0 w-full h-full pointer-events-none z-10">
-            <defs>
-              <linearGradient id="horizonLassoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#8CC1E9" />
-                <stop offset="35%" stopColor="#438BC4" />
-                <stop offset="70%" stopColor="#0055A0" />
-                <stop offset="100%" stopColor="#FFF8E7" />
-              </linearGradient>
-              <filter id="horizonGlow" x="-30%" y="-30%" width="160%" height="160%">
-                <feGaussianBlur stdDeviation="3.5" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
+        {/* Interactive Freehand Catmull-Rom Curve & AABB Bounding Box */}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none z-10">
+          <defs>
+            <linearGradient id="horizonLassoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#8CC1E9" />
+              <stop offset="35%" stopColor="#438BC4" />
+              <stop offset="70%" stopColor="#0055A0" />
+              <stop offset="100%" stopColor="#FFF8E7" />
+            </linearGradient>
+            <filter id="horizonGlow" x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="3.5" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
 
-            {/* Catmull-Rom smooth freehand stroke */}
+          {/* Catmull-Rom smooth freehand stroke */}
+          {svgPath && (
             <path
-              d="M 160 110 C 220 90, 480 80, 540 120 C 580 150, 570 300, 530 330 C 470 360, 220 370, 150 330 C 110 300, 110 150, 160 110 Z"
-              fill="rgba(140, 193, 233, 0.08)"
+              d={svgPath}
+              fill="rgba(140, 193, 233, 0.12)"
               stroke="url(#horizonLassoGrad)"
               strokeWidth="2.5"
               filter="url(#horizonGlow)"
-              className="animate-pulse"
+              className={isDrawing ? '' : 'animate-pulse'}
             />
+          )}
 
-            {/* Bounding Box (AABB + 12px padding) */}
-            <rect
-              x="128"
-              y="78"
-              width="434"
-              height="284"
-              fill="none"
-              stroke="#8CC1E9"
-              strokeWidth="1.5"
-              strokeDasharray="6 4"
-              className="opacity-80"
-            />
-          </svg>
-        )}
+          {/* Bounding Box (AABB + 12px padding per §3.1) */}
+          {boundingBox && boundingBox.w > 0 && boundingBox.h > 0 && (
+            <g>
+              <rect
+                x={boundingBox.x}
+                y={boundingBox.y}
+                width={boundingBox.w}
+                height={boundingBox.h}
+                fill="none"
+                stroke="#8CC1E9"
+                strokeWidth="1.5"
+                strokeDasharray="6 4"
+                className="opacity-90"
+              />
+              {/* Coordinate Pill Badge */}
+              <foreignObject
+                x={Math.max(4, boundingBox.x)}
+                y={Math.max(4, boundingBox.y - 26)}
+                width={Math.max(160, boundingBox.w)}
+                height="24"
+              >
+                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#0055A0]/80 backdrop-blur-md text-[10px] font-mono text-[#FFF8E7] border border-[#8CC1E9]/40 shadow-sm whitespace-nowrap">
+                  <Crop size={10} className="text-[#8CC1E9]" />
+                  <span>{boundingBox.w}×{boundingBox.h}px (+12px padding)</span>
+                </div>
+              </foreignObject>
+            </g>
+          )}
+        </svg>
 
         {/* Anchored Capture Toolbar */}
-        <div className={`absolute top-4 right-4 z-30 flex items-center gap-2 p-1.5 rounded-2xl border shadow-xl backdrop-blur-md ${
-          isDarkMode ? 'liquid-glass-dark text-slate-200 border-[#8CC1E9]/30' : 'liquid-glass-light text-slate-800 border-[#8CC1E9]/35'
-        }`}>
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          className={`absolute top-4 right-4 z-30 flex items-center gap-2 p-1.5 rounded-2xl border shadow-2xl backdrop-blur-xl ${
+            isDarkMode ? 'liquid-glass-dark text-slate-200 border-[#8CC1E9]/30' : 'liquid-glass-light text-slate-800 border-[#8CC1E9]/35'
+          }`}
+        >
           {onAttachArea && (
             <>
-              {showAABB && (
+              {boundingBox && boundingBox.w > 0 && (
                 <button
-                  onClick={() => onAttachArea({ 
-                    type: 'crop', 
-                    label: 'Screen Crop', 
-                    coords: captureDetails ? { x: 128, y: 78, w: 434, h: 284 } : simulatedCoords 
-                  })}
-                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-[#0055A0] via-[#438BC4] to-[#8CC1E9] text-[#FFF8E7] flex items-center gap-1.5 shadow-md shadow-[#438BC4]/30 hover:brightness-110 transition-all border border-[#FFF8E7]/30"
+                  onClick={handleAttachSelection}
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-[#0055A0] via-[#438BC4] to-[#8CC1E9] text-[#FFF8E7] flex items-center gap-1.5 shadow-md shadow-[#438BC4]/30 hover:brightness-110 transition-all border border-[#FFF8E7]/30"
                 >
-                  <GeminiSparkle size={12} />
-                  <span>Attach Selection</span>
+                  <Check size={13} />
+                  <span>Attach Selection ({boundingBox.w}×{boundingBox.h})</span>
                 </button>
               )}
               <button
-                onClick={() => onAttachArea({ 
-                  type: 'fullscreen', 
-                  label: 'Full Screen', 
-                  coords: captureDetails ? { x: 0, y: 0, w: captureDetails.width, h: captureDetails.height } : { x: 0, y: 0, w: 1920, h: 1080 } 
-                })}
+                onClick={handleAttachFullScreen}
                 className="px-3 py-1.5 rounded-xl text-xs font-medium border border-slate-300 dark:border-slate-700 hover:border-[#8CC1E9] text-slate-700 dark:text-slate-200 transition-all flex items-center gap-1.5"
               >
                 <Monitor size={12} />
@@ -187,24 +391,29 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
               </button>
             </>
           )}
-          {showAABB ? (
+
+          {points.length > 0 ? (
             <button
-              onClick={() => setShowAABB(false)}
+              onClick={handleClearLasso}
               className="px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 text-[#0055A0] dark:text-[#8CC1E9] hover:bg-[#8CC1E9]/15 transition-all"
+              title="Clear current selection"
             >
               <RotateCcw size={13} />
-              <span>Clear Lasso</span>
+              <span>Clear</span>
             </button>
           ) : (
             <button
-              onClick={() => setShowAABB(true)}
+              onClick={handleResetDemoLasso}
               className="px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 text-[#0055A0] dark:text-[#FFF8E7] hover:bg-[#438BC4]/15 transition-all"
+              title="Draw sample selection"
             >
               <Lasso size={13} />
-              <span>Redraw Lasso</span>
+              <span>Sample Lasso</span>
             </button>
           )}
+
           <div className="w-[1px] h-4 bg-slate-200 dark:bg-slate-700" />
+
           <button
             onClick={onExit || (() => alert("Simulated ESC Exit"))}
             className="px-2.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1 text-slate-400 hover:text-[#8CC1E9] transition-colors"
@@ -214,6 +423,18 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
             <span>Exit</span>
           </button>
         </div>
+
+        {/* Drag Helper Callout for New Users */}
+        {points.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+            <div className={`px-4 py-2 rounded-2xl border backdrop-blur-md flex items-center gap-2 text-xs font-mono shadow-xl animate-fade-in ${
+              isDarkMode ? 'bg-[#0f141c]/80 text-[#8CC1E9] border-[#8CC1E9]/30' : 'bg-white/80 text-[#0055A0] border-[#8CC1E9]/40'
+            }`}>
+              <Crop size={14} className="animate-spin text-[#8CC1E9]" />
+              <span>Click and drag mouse anywhere to circle a region</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

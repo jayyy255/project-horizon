@@ -17,9 +17,7 @@ export const HUDCollapsedChip: React.FC<HUDCollapsedChipProps> = ({
   isExpanded = false,
   onToggleLogs,
   currentNarration,
-  toolCategory = "search"
 }) => {
-  const [category, setCategory] = useState(toolCategory);
   const [narrationIdx, setNarrationIdx] = useState(0);
   const [isMinimized, setIsMinimized] = useState(false);
 
