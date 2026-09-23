@@ -1,0 +1,35 @@
+appId: com.projecthorizon.desktop
+productName: Project Horizon
+copyright: Copyright © 2026 Project Horizon
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - "dist-electron/**/*"
+  - "frontend/dist/**/*"
+  - "package.json"
+
+win:
+  icon: "build/icon.ico"
+  target:
+    - target: dir
+      arch:
+        - x64
+    - target: nsis
+      arch:
+        - x64
+  artifactName: "${productName}-Setup-${version}.${ext}"
+
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: "Project Horizon"
+
+
+asar: true

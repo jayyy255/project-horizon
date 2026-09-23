@@ -16,6 +16,7 @@ ENV/
 # Build & Bundler outputs
 dist/
 dist-electron/
+release/
 **/dist/
 build/
 **/build/
@@ -23,6 +24,8 @@ out/
 .vite/
 **/.vite/
 .turbo/
+user_lasso_crop_*.png
+
 
 # Generated TypeScript declarations & artifacts in shared
 shared/*.js

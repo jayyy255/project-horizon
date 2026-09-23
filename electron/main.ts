@@ -9,14 +9,33 @@ import {
   Menu,
   nativeImage,
 } from 'electron';
+import fs from 'fs';
 import path from 'path';
+import dotenv from 'dotenv';
 import { AgentHost } from './agent';
+
+// Load .env from root workspace or packaged app path
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+if (!process.env.GEMINI_API_KEY) {
+  dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+}
+if (!process.env.GEMINI_API_KEY) {
+  try {
+    dotenv.config({ path: path.resolve(app.getAppPath(), '.env') });
+  } catch {
+    // ignore if app is not ready yet
+  }
+}
+if (process.env.GEMINI_API_KEY) {
+  console.log('[Project Horizon] Gemini API Key loaded successfully from .env');
+}
 
 let mainWindow: BrowserWindow | null = null;
 let overlayWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let agentHost: AgentHost | null = null;
 let isOverlayVisible = false;
+
 let lastCapturedData: {
   dataUrl: string;
   width: number;
@@ -78,8 +97,21 @@ async function captureRealDesktop(): Promise<{
   return lastCapturedData;
 }
 
+function findDistPath(): string {
+  const candidates = [
+    path.join(__dirname, '../../frontend/dist/index.html'),
+    path.join(__dirname, '../frontend/dist/index.html'),
+    path.join(app.getAppPath(), 'frontend/dist/index.html'),
+    path.join(process.cwd(), 'frontend/dist/index.html'),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return candidates[0];
+}
+
 function loadWindowContent(win: BrowserWindow, hash?: string) {
-  const distPath = path.join(__dirname, '../../frontend/dist/index.html');
+  const distPath = findDistPath();
   const isDev = process.env.USE_DEV_SERVER === 'true';
 
   if (isDev) {
@@ -91,6 +123,7 @@ function loadWindowContent(win: BrowserWindow, hash?: string) {
     win.loadFile(distPath, hash ? { hash } : undefined);
   }
 }
+
 
 function createMainWindow(): BrowserWindow {
   const primaryDisplay = screen.getPrimaryDisplay();

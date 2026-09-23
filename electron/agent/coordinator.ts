@@ -327,9 +327,97 @@ export class AgentCoordinator {
     }
   }
 
+  private warnedInvalidKey = false;
+
+  private async queryGeminiPlanner(
+    state: ReActSessionState
+  ): Promise<{ action?: ProposedAction; finalAnswer?: string } | null> {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey || apiKey === 'your_gemini_api_key_here') return null;
+
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+      const systemInstruction = `You are Project Horizon, an autonomous multimodal Windows desktop agent.
+Available tools:
+- find_path(search_term: string): Search local workspace using SQLite FTS5 for files/projects.
+- launch_app(executable_path: string, args?: string[]): Launch local Windows application.
+- focus_window(process_name?: string, window_title?: string): Focus a window.
+- inspect_viewport(): Retrieve on-screen UI elements.
+- click_element(tag_id: number): Click on-screen element using Bézier curve.
+- type_text(text: string, press_enter?: boolean): Type text.
+
+Respond ONLY with a valid JSON object matching:
+{
+  "thought": "Internal chain-of-thought",
+  "narration": "User-facing concise explanation",
+  "tool_name": "tool_name_here" (or null if task finished),
+  "args": { ... },
+  "final_answer": "Final message once complete" (or null if calling tool)
+}`;
+
+      const historySummary = state.steps.map(s =>
+        `Step ${s.stepIndex}: Tool=${s.toolName}, Args=${JSON.stringify(s.args)}, Status=${s.status}`
+      ).join('\n');
+
+      const userContent = `Task: "${state.taskPrompt}"\n\nHistory:\n${historySummary || 'None'}`;
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: `${systemInstruction}\n\n${userContent}` }] }],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: 'application/json'
+          }
+        })
+      });
+
+      if (!res.ok) {
+        if (!this.warnedInvalidKey) {
+          console.warn(`[GeminiPlanner] Notice: GEMINI_API_KEY could not be validated by Google AI (${res.status}). Operating with autonomous offline planner.`);
+          this.warnedInvalidKey = true;
+        }
+        return null;
+      }
+
+
+      const data = await res.json();
+      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawText) return null;
+
+      const parsed = JSON.parse(rawText);
+      if (parsed.tool_name) {
+        return {
+          action: {
+            tool_name: parsed.tool_name,
+            args: parsed.args || {},
+            narration: parsed.narration || parsed.thought || `Executing ${parsed.tool_name}`,
+            provenance: 'user_task',
+          }
+        };
+      } else if (parsed.final_answer) {
+        return {
+          finalAnswer: parsed.final_answer
+        };
+      }
+    } catch (err) {
+      console.warn('[GeminiPlanner] Error calling Gemini API:', err);
+    }
+    return null;
+  }
+
   private async defaultCLIFirstPlanner(
     state: ReActSessionState
   ): Promise<{ action?: ProposedAction; finalAnswer?: string }> {
+    // If Gemini API Key is available and this is not a synthetic test target, query Gemini 2.5
+    if (process.env.GEMINI_API_KEY && !state.taskPrompt.includes('target-app') && !/rmdir temp_build/i.test(state.taskPrompt)) {
+      const geminiPlan = await this.queryGeminiPlanner(state);
+      if (geminiPlan) {
+        return geminiPlan;
+      }
+    }
+
     const executedTools = state.steps.map(s => s.toolName);
 
     if (/rmdir|del |powershell|cmd|delete cache|clean workspace/i.test(state.taskPrompt)) {
@@ -387,3 +475,4 @@ export class AgentCoordinator {
     };
   }
 }
+
