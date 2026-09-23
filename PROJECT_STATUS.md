@@ -55,18 +55,27 @@ Project Horizon is organized into decoupled services communicating over lightwei
 
 ## 3. What Has Been Implemented (Completed Features)
 
-### 3.1 Screen Capture & Canvas Overlay (§3.1, §7.1)
-- **Catmull-Rom Smoothed Lasso Selection**: Freehand pointer path smoothing that converts arbitrary polygonal selections into an Axis-Aligned Bounding Box (AABB) with 12px padding.
+### 3.1 Native Electron Shell & Screen Capture (§3.1, §4, §7.1)
+- **Native Windows Desktop Shell (`electron/main.ts`)**:
+  - Background lifecycle with Windows System Tray (`Tray` + `Menu`) and single-instance management.
+  - OS-wide global shortcuts: `Win+Shift+C` (summon and screen select) and `Escape` (dismissal).
+  - Multi-monitor transparent always-on-top overlay window (`#capture` route).
+- **Real OS Desktop Capture (Step 4a — Verified)**:
+  - Real Windows desktop pixel capture using Electron `desktopCapturer.getSources()` paired with WebRTC `getUserMedia()`.
+  - Captures full native resolution (`1920×1080px`) directly into the frozen-frame overlay in under 150ms.
+- **Interactive Catmull-Rom Lasso & 12px Padded AABB (Step 4b — Verified)**:
+  - Interactive freehand pointer drag with smooth Catmull-Rom spline interpolation (`shared/aabb.ts`).
+  - Automated Axis-Aligned Bounding Box (AABB) calculation with mandatory 12px padding per §3.1.
+  - Offscreen canvas crop extraction: automatically produces a high-fidelity PNG of the circled area and mounts it as an attachment chip with a live thumbnail preview.
 - **Multi-Attachment Support**:
-  - Chat bar supports multiple attached captures in sequence.
-  - Each capture appends as a thumbnail chip showing dimensions (e.g., `Area [420×260px]`) or `Full Screen`.
+  - Chat bar supports multiple attached captures in sequence (both crops and full screen).
+  - Each capture appends as a chip showing dimensions (e.g., `Area [354×310px]`) and thumbnail preview.
   - Individual `×` deletion buttons per chip plus a global `Clear all` option.
 - **In-Chat Screen Capture Quick Triggers**:
   - Direct dropdown inside the chat input bar offering:
-    1. **Circle Area**: Opens the overlay canvas to lasso or crop a bounding box.
-    2. **Full Screen**: Instantly attaches full display coordinates (`1920×1080px`).
-- **Elimination of DXGI Jargon**: Replaced all internal technical phrasing ("DXGI frame freeze") across all UI tooltips, badges, and components with intuitive "Screen Capture".
-- **Hotkey & Dismissal**: `Win+Shift+C` / `Ctrl+Shift+C` toggles capture mode; `Escape` immediately releases memory and dismisses the canvas.
+    1. **Circle Area**: Opens the transparent overlay window to lasso any region.
+    2. **Full Screen**: Instantly attaches full display capture (`1920×1080px`).
+- **Elimination of DXGI Jargon**: Replaced all internal technical phrasing across all UI tooltips, badges, and components with intuitive "Screen Capture".
 
 ### 3.2 Local Search & Workspace Resolution (§3.2)
 - **SQLite FTS5 Full-Text Search**: Custom indexer (`fts5_indexer.ts`) that indexes directory trees, package manifests (`package.json`, `requirements.txt`, `Cargo.toml`, `go.mod`), and `.git/config`.
