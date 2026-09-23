@@ -45,8 +45,19 @@ app.whenReady().then(() => {
       if (!fs.existsSync(outDir)) {
         fs.mkdirSync(outDir, { recursive: true });
       }
-      const outPath = path.join(outDir, 'user_lasso_screenshot.png');
+
+      const timestamp = Date.now();
+      const filename = `user_lasso_crop_${timestamp}.png`;
+      const outPath = path.join(outDir, filename);
       fs.writeFileSync(outPath, base64Data, 'base64');
+
+      // Also update latest copy with safe fallback
+      const latestPath = path.join(outDir, 'user_lasso_screenshot.png');
+      try {
+        fs.writeFileSync(latestPath, base64Data, 'base64');
+      } catch (lockErr) {
+        // Locked by external viewer, ignore
+      }
 
       console.log('\n================================================================');
       console.log('>>> [SUCCESS] Interactive Lasso Screenshot Captured!');
@@ -361,11 +372,14 @@ app.whenReady().then(() => {
 
         video.srcObject = stream;
 
+        let captured = false;
         const onFrameReady = () => {
+          if (captured) return;
           if (video.videoWidth === 0 || video.videoHeight === 0) {
             setTimeout(onFrameReady, 50);
             return;
           }
+          captured = true;
 
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
