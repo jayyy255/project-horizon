@@ -427,16 +427,103 @@ Respond ONLY with a valid JSON object matching:
     return null;
   }
 
+  private async queryOllamaPlanner(
+    state: ReActSessionState
+  ): Promise<{ action?: ProposedAction; finalAnswer?: string } | null> {
+    const ollamaHost = process.env.OLLAMA_HOST || 'http://localhost:11434';
+    const ollamaModel = process.env.OLLAMA_MODEL || 'qwen2.5:3b';
+
+    try {
+      const systemInstruction = `You are Project Horizon, an autonomous multimodal Windows desktop agent running on local hardware via Ollama (${ollamaModel}).
+Available tools:
+- find_path(search_term: string): Search local workspace using SQLite FTS5 for files/projects.
+- launch_app(executable_path: string, args?: string[]): Launch local Windows application.
+- focus_window(process_name?: string, window_title?: string): Focus a window.
+- inspect_viewport(): Retrieve on-screen UI elements.
+- click_element(tag_id: number): Click on-screen element using Bézier curve.
+- type_text(text: string, press_enter?: boolean): Type text.
+
+Respond ONLY with a valid JSON object matching:
+{
+  "thought": "Internal chain-of-thought",
+  "narration": "User-facing concise explanation",
+  "tool_name": "tool_name_here" (or null if task finished),
+  "args": { ... },
+  "final_answer": "Final message once complete" (or null if calling tool)
+}`;
+
+      const historySummary = state.steps.map(s =>
+        `Step ${s.stepIndex}: Tool=${s.toolName}, Args=${JSON.stringify(s.args)}, Status=${s.status}`
+      ).join('\n');
+
+      const userContent = `Task: "${state.taskPrompt}"\n\nHistory:\n${historySummary || 'None'}`;
+
+      const res = await fetch(`${ollamaHost}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: ollamaModel,
+          messages: [
+            { role: 'system', content: systemInstruction },
+            { role: 'user', content: userContent }
+          ],
+          format: 'json',
+          stream: false,
+          options: {
+            temperature: 0.1
+          }
+        }),
+        signal: AbortSignal.timeout(6000)
+      });
+
+      if (!res.ok) {
+        return null;
+      }
+
+      const data = await res.json();
+      const rawText = data.message?.content;
+      if (!rawText) return null;
+
+      const parsed = JSON.parse(rawText);
+      if (parsed.tool_name) {
+        return {
+          action: {
+            tool_name: parsed.tool_name,
+            args: parsed.args || {},
+            narration: parsed.narration || parsed.thought || `[Ollama:${ollamaModel}] Executing ${parsed.tool_name}`,
+            provenance: 'user_task',
+          }
+        };
+      } else if (parsed.final_answer) {
+        return {
+          finalAnswer: parsed.final_answer
+        };
+      }
+    } catch {
+      // Ollama not responding or timed out -> silently fallback to deterministic rule planner
+    }
+    return null;
+  }
+
   private async defaultCLIFirstPlanner(
     state: ReActSessionState
   ): Promise<{ action?: ProposedAction; finalAnswer?: string }> {
-    // If Gemini API Key is available and this is not a synthetic test target, query Gemini (2.5 Flash main -> 2.5 Flash Lite fallback)
+    // 1. Try Google Gemini (2.5 Flash main -> 2.5 Flash Lite fallback)
     if (process.env.GEMINI_API_KEY && !state.taskPrompt.includes('target-app') && !/rmdir temp_build/i.test(state.taskPrompt)) {
       const geminiPlan = await this.queryGeminiPlanner(state);
       if (geminiPlan) {
         return geminiPlan;
       }
     }
+
+    // 2. Try Local Ollama Fallback (e.g. Qwen2.5:3b running on local RTX 4060 GPU)
+    if (!state.taskPrompt.includes('target-app') && !/rmdir temp_build/i.test(state.taskPrompt)) {
+      const ollamaPlan = await this.queryOllamaPlanner(state);
+      if (ollamaPlan) {
+        return ollamaPlan;
+      }
+    }
+
 
 
 
