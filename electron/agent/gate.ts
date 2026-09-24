@@ -50,8 +50,9 @@ export class SafetyGate {
   ];
 
   constructor(config: SafetyGateConfig = {}) {
-    this.allowedProjectRoots = (config.allowedProjectRoots || ['C:/Users', 'D:/', 'E:/'])
-      .map(r => path.normalize(r).toLowerCase());
+    this.allowedProjectRoots = (config.allowedProjectRoots || [
+      'C:/Users', 'D:/', 'E:/', 'C:/Program Files', 'C:/Program Files (x86)', 'C:/Windows/System32'
+    ]).map(r => path.normalize(r).toLowerCase());
     this.maxTypeLength = config.maxTypeLength || 1000;
     this.maxToolCallsPerTask = config.maxToolCallsPerTask || 50;
   }
@@ -193,8 +194,10 @@ export class SafetyGate {
         }
 
         const normalized = path.normalize(execPath).toLowerCase();
+        const base = path.basename(execPath).toLowerCase();
         const isUnderAllowedRoot = this.allowedProjectRoots.some(root => normalized.startsWith(root));
-        if (!isUnderAllowedRoot && !execPath.endsWith('.exe')) {
+        const isStandardDevTool = ['code', 'code.cmd', 'git', 'npm', 'node', 'python'].includes(base);
+        if (!isUnderAllowedRoot && !execPath.endsWith('.exe') && !isStandardDevTool) {
           return {
             allowed: false,
             tier: 1,

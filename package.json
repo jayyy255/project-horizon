@@ -20,6 +20,7 @@
     "test:all": "npm run test:frontend && npm run test:agent && npm run test:perception",
     "test:lasso": "electron scripts/test_interactive_lasso.js",
     "test:step4c": "npm run build:electron && electron scripts/test_step4c_inprocess_agent.js",
+    "test:gemini": "npm run build:electron && electron scripts/test_gemini_react_integration.js",
     "build:desktop": "npm run build:frontend && npm run build:electron",
     "package:dir": "npm run build:desktop && electron-builder --dir",
     "package:win": "npm run build:desktop && electron-builder --win",

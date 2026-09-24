@@ -1,3 +1,6 @@
+import { spawn } from 'child_process';
+import fs from 'fs';
+import path from 'path';
 import { SafetyGate, ProposedAction, GateEvaluationResult } from './gate';
 import { ProjectIndexer } from './indexer';
 import { InputSynthesizer } from './synthesizer';
@@ -276,12 +279,37 @@ export class AgentCoordinator {
         return this.projectIndexer.findPath(query, 5);
       }
       case 'launch_app': {
-        return {
-          status: 'launched',
-          target: args.executable_path,
-          args: args.args,
-          pid: 1000 + Math.floor(Math.random() * 9000),
-        };
+        const exe = String(args.executable_path || '');
+        const cmdArgs = Array.isArray(args.args) ? (args.args as string[]) : [];
+        try {
+          let targetExe = exe;
+          if (exe.includes('Code.exe') && !fs.existsSync(exe)) {
+            const userVsCode = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Microsoft VS Code', 'Code.exe');
+            if (fs.existsSync(userVsCode)) {
+              targetExe = userVsCode;
+            } else {
+              targetExe = 'code.cmd';
+            }
+          }
+          const child = spawn(targetExe, cmdArgs, {
+            detached: true,
+            stdio: 'ignore',
+            shell: true,
+          });
+          child.unref();
+          return {
+            status: 'launched',
+            target: targetExe,
+            args: cmdArgs,
+            pid: child.pid || 1000,
+          };
+        } catch (err: any) {
+          return {
+            status: 'failed',
+            target: exe,
+            error: err.message,
+          };
+        }
       }
       case 'focus_window': {
         return { focused: true, target: args.process_name || args.window_title };
@@ -340,8 +368,13 @@ export class AgentCoordinator {
 
     // Main cloud planner: Gemini 3.5 Flash-Lite
     const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
+    const hostname = 'generativelanguage.googleapis.com';
+    const startTime = performance.now();
+
+    console.log(`[Gemini Live HTTP] Request started -> hostname: ${hostname}, model: ${model}`);
+
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const url = `https://${hostname}/v1beta/models/${model}:generateContent?key=${apiKey}`;
       const systemInstruction = `You are Project Horizon, an autonomous multimodal Windows desktop agent using ${model}.
 Available tools:
 - find_path(search_term: string): Search local workspace using SQLite FTS5 for files/projects.
@@ -350,6 +383,12 @@ Available tools:
 - inspect_viewport(): Retrieve on-screen UI elements.
 - click_element(tag_id: number): Click on-screen element using Bézier curve.
 - type_text(text: string, press_enter?: boolean): Type text.
+
+Strategy:
+- If asked to open/find a project/folder and you don't know the exact path yet, call find_path first.
+- Once find_path returns a path, call launch_app to open it (e.g. executable_path "C:/Program Files/Microsoft VS Code/Code.exe" or "code" with args [path]).
+- If asked to clean or delete cache/files (e.g. rmdir), call launch_app with the shell command (this will trigger Tier 2 Safety Gate).
+- If all steps are complete or answering a question, return final_answer.
 
 Respond ONLY with a valid JSON object matching:
 {
@@ -361,10 +400,10 @@ Respond ONLY with a valid JSON object matching:
 }`;
 
       const historySummary = state.steps.map(s =>
-        `Step ${s.stepIndex}: Tool=${s.toolName}, Args=${JSON.stringify(s.args)}, Status=${s.status}`
+        `Step ${s.stepIndex}: Tool=${s.toolName}, Args=${JSON.stringify(s.args)}, Status=${s.status}, Result=${JSON.stringify(s.result)}`
       ).join('\n');
 
-      const userContent = `Task: "${state.taskPrompt}"\n\nHistory:\n${historySummary || 'None'}`;
+      const userContent = `Task: "${state.taskPrompt}"\n\nHistory of executed steps and results:\n${historySummary || 'None'}`;
 
       const res = await fetch(url, {
         method: 'POST',
@@ -376,12 +415,15 @@ Respond ONLY with a valid JSON object matching:
             responseMimeType: 'application/json'
           }
         }),
-        signal: AbortSignal.timeout(4000)
+        signal: AbortSignal.timeout(12000)
       });
+
+      const latencyMs = performance.now() - startTime;
+      console.log(`[Gemini Live HTTP] Response received -> hostname: ${hostname}, model: ${model}, status: ${res.status}, latency: ${latencyMs.toFixed(2)} ms`);
 
       if (!res.ok) {
         const errText = await res.text().catch(() => '');
-        console.warn(`[GeminiPlanner] ${model} returned HTTP ${res.status}: ${errText.substring(0, 150)}. Engaging Ollama fallback.`);
+        console.warn(`[Gemini Live HTTP] Non-200 response (${res.status}): ${errText.substring(0, 150)}. Engaging Ollama fallback.`);
         return null;
       }
 
@@ -405,7 +447,8 @@ Respond ONLY with a valid JSON object matching:
         };
       }
     } catch (err) {
-      console.warn(`[GeminiPlanner] Error calling ${model}, falling back to Ollama:`, err);
+      const latencyMs = performance.now() - startTime;
+      console.warn(`[Gemini Live HTTP] Request failed after ${latencyMs.toFixed(2)} ms:`, err);
     }
     return null;
   }
@@ -523,25 +566,34 @@ Respond ONLY with a valid JSON object matching:
   private async defaultCLIFirstPlanner(
     state: ReActSessionState
   ): Promise<{ action?: ProposedAction; finalAnswer?: string }> {
-    // 1. Try Google Gemini (2.5 Flash main -> 2.5 Flash Lite fallback)
-    if (process.env.GEMINI_API_KEY && !state.taskPrompt.includes('target-app') && !/rmdir temp_build/i.test(state.taskPrompt)) {
+    // If deterministic unit test mode is explicitly requested via env variable
+    if (process.env.MOCK_PLANNER === 'true') {
+      return this.fallbackDeterministicPlanner(state);
+    }
+
+    // 1. Primary Cloud Planner: Google Gemini (gemini-3.5-flash-lite)
+    if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'your_gemini_api_key_here') {
       const geminiPlan = await this.queryGeminiPlanner(state);
       if (geminiPlan) {
         return geminiPlan;
       }
     }
 
-    // 2. Try Local Ollama Fallback (e.g. Qwen2.5:3b running on local RTX 4060 GPU)
-    if (!state.taskPrompt.includes('target-app') && !/rmdir temp_build/i.test(state.taskPrompt)) {
-      const ollamaPlan = await this.queryOllamaPlanner(state);
-      if (ollamaPlan) {
-        return ollamaPlan;
-      }
+    // 2. Local Fallback Planner: Local Ollama (RTX 4060 GPU - Qwen 2.5:3b / Llama 3.2 Vision)
+    const ollamaPlan = await this.queryOllamaPlanner(state);
+    if (ollamaPlan) {
+      return ollamaPlan;
     }
 
+    throw new Error('No AI planner responded: both Gemini live API and Ollama local fallback failed to produce a valid plan.');
+  }
 
-
-
+  /**
+   * Deterministic fallback ONLY used when process.env.MOCK_PLANNER === 'true' for offline unit tests.
+   */
+  public fallbackDeterministicPlanner(
+    state: ReActSessionState
+  ): { action?: ProposedAction; finalAnswer?: string } {
     const executedTools = state.steps.map(s => s.toolName);
 
     if (/rmdir|del |powershell|cmd|delete cache|clean workspace/i.test(state.taskPrompt)) {

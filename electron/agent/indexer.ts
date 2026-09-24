@@ -224,16 +224,21 @@ export class ProjectIndexer {
       }
     }
 
-    // In-memory fuzzy match fallback
-    const lower = sanitized.toLowerCase();
+    // In-memory tokenized match fallback
+    const tokens = sanitized.toLowerCase().split(/\s+/).filter(Boolean);
     const matches: SearchResult[] = [];
     for (const item of this.inMemoryIndex) {
-      if (item.name.toLowerCase().includes(lower) || item.path.toLowerCase().includes(lower)) {
+      const name = item.name.toLowerCase();
+      const itemPath = item.path.toLowerCase();
+      const content = (item.content || '').toLowerCase();
+      const matchesAll = tokens.every(t => name.includes(t) || itemPath.includes(t) || content.includes(t));
+      const matchesAny = tokens.some(t => name.includes(t) || itemPath.includes(t));
+      if (matchesAll || matchesAny) {
         matches.push({
           name: item.name,
           path: item.path,
           manifest_type: item.manifest_type,
-          score: 1.0,
+          score: matchesAll ? 1.0 : 0.5,
         });
         if (matches.length >= limit) break;
       }
