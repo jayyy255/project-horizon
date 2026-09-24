@@ -335,9 +335,23 @@ export class AgentCoordinator {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey || apiKey === 'your_gemini_api_key_here') return null;
 
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-      const systemInstruction = `You are Project Horizon, an autonomous multimodal Windows desktop agent.
+    // Main: Gemini 2.5 Flash | Fallback: Gemini 2.5 Flash-Lite
+    const mainModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const fallbackModel = process.env.GEMINI_FALLBACK_MODEL || process.env.GEMINI_FAST_MODEL || 'gemini-2.5-flash-lite';
+
+    const candidateModels = [
+      mainModel,
+      fallbackModel,
+      'gemini-2.0-flash',
+      'gemini-2.0-flash-lite',
+      'gemini-1.5-flash',
+    ];
+
+    for (let i = 0; i < candidateModels.length; i++) {
+      const model = candidateModels[i];
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const systemInstruction = `You are Project Horizon, an autonomous multimodal Windows desktop agent using ${model}.
 Available tools:
 - find_path(search_term: string): Search local workspace using SQLite FTS5 for files/projects.
 - launch_app(executable_path: string, args?: string[]): Launch local Windows application.
@@ -355,54 +369,60 @@ Respond ONLY with a valid JSON object matching:
   "final_answer": "Final message once complete" (or null if calling tool)
 }`;
 
-      const historySummary = state.steps.map(s =>
-        `Step ${s.stepIndex}: Tool=${s.toolName}, Args=${JSON.stringify(s.args)}, Status=${s.status}`
-      ).join('\n');
+        const historySummary = state.steps.map(s =>
+          `Step ${s.stepIndex}: Tool=${s.toolName}, Args=${JSON.stringify(s.args)}, Status=${s.status}`
+        ).join('\n');
 
-      const userContent = `Task: "${state.taskPrompt}"\n\nHistory:\n${historySummary || 'None'}`;
+        const userContent = `Task: "${state.taskPrompt}"\n\nHistory:\n${historySummary || 'None'}`;
 
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: `${systemInstruction}\n\n${userContent}` }] }],
-          generationConfig: {
-            temperature: 0.1,
-            responseMimeType: 'application/json'
-          }
-        })
-      });
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: `${systemInstruction}\n\n${userContent}` }] }],
+            generationConfig: {
+              temperature: 0.1,
+              responseMimeType: 'application/json'
+            }
+          })
+        });
 
-      if (!res.ok) {
-        if (!this.warnedInvalidKey) {
-          console.warn(`[GeminiPlanner] Notice: GEMINI_API_KEY could not be validated by Google AI (${res.status}). Operating with autonomous offline planner.`);
-          this.warnedInvalidKey = true;
+        if (res.status === 404 || res.status === 503 || res.status === 429) {
+          // Model unavailable or rate-limited; immediately failover to fallback
+          console.warn(`[GeminiPlanner] ${model} unavailable (HTTP ${res.status}). Failing over to next candidate...`);
+          continue;
         }
-        return null;
-      }
 
-
-      const data = await res.json();
-      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!rawText) return null;
-
-      const parsed = JSON.parse(rawText);
-      if (parsed.tool_name) {
-        return {
-          action: {
-            tool_name: parsed.tool_name,
-            args: parsed.args || {},
-            narration: parsed.narration || parsed.thought || `Executing ${parsed.tool_name}`,
-            provenance: 'user_task',
+        if (!res.ok) {
+          if (!this.warnedInvalidKey) {
+            console.warn(`[GeminiPlanner] Notice: Google AI API returned HTTP ${res.status} for model ${model}. Operating with autonomous offline planner.`);
+            this.warnedInvalidKey = true;
           }
-        };
-      } else if (parsed.final_answer) {
-        return {
-          finalAnswer: parsed.final_answer
-        };
+          return null;
+        }
+
+        const data = await res.json();
+        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!rawText) continue;
+
+        const parsed = JSON.parse(rawText);
+        if (parsed.tool_name) {
+          return {
+            action: {
+              tool_name: parsed.tool_name,
+              args: parsed.args || {},
+              narration: parsed.narration || parsed.thought || `[${model}] Executing ${parsed.tool_name}`,
+              provenance: 'user_task',
+            }
+          };
+        } else if (parsed.final_answer) {
+          return {
+            finalAnswer: parsed.final_answer
+          };
+        }
+      } catch (err) {
+        console.warn(`[GeminiPlanner] Error calling ${model}, attempting fallback:`, err);
       }
-    } catch (err) {
-      console.warn('[GeminiPlanner] Error calling Gemini API:', err);
     }
     return null;
   }
@@ -410,13 +430,15 @@ Respond ONLY with a valid JSON object matching:
   private async defaultCLIFirstPlanner(
     state: ReActSessionState
   ): Promise<{ action?: ProposedAction; finalAnswer?: string }> {
-    // If Gemini API Key is available and this is not a synthetic test target, query Gemini 2.5
+    // If Gemini API Key is available and this is not a synthetic test target, query Gemini (2.5 Flash main -> 2.5 Flash Lite fallback)
     if (process.env.GEMINI_API_KEY && !state.taskPrompt.includes('target-app') && !/rmdir temp_build/i.test(state.taskPrompt)) {
       const geminiPlan = await this.queryGeminiPlanner(state);
       if (geminiPlan) {
         return geminiPlan;
       }
     }
+
+
 
     const executedTools = state.steps.map(s => s.toolName);
 
