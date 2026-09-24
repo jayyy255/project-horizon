@@ -56,11 +56,11 @@ export class AgentHost {
 
   private registerIpcHandlers(): void {
     // 1. Execute task
-    ipcMain.handle('horizon:execute-task', async (_event, payload: { prompt: string; sessionId?: string }) => {
+    ipcMain.handle('horizon:execute-task', async (_event, payload: { prompt: string; sessionId?: string; images?: string[] }) => {
       const sessionId = payload.sessionId || `sess-${Date.now()}`;
       try {
-        console.log(`[AgentHost] Executing task: "${payload.prompt}" (Session: ${sessionId})`);
-        return await this.coordinator.executeTask(sessionId, payload.prompt);
+        console.log(`[AgentHost] Executing task: "${payload.prompt}" (Session: ${sessionId}, Images: ${payload.images?.length || 0})`);
+        return await this.coordinator.executeTask(sessionId, payload.prompt, undefined, payload.images);
       } catch (err: any) {
         console.error('[AgentHost] Execute task error:', err);
         throw err;

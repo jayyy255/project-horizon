@@ -275,10 +275,14 @@ export default function App() {
       ? `[${atts.map(a => a.type === 'crop' && a.coords ? `Crop (${a.coords.x},${a.coords.y},${a.coords.w}×${a.coords.h})` : a.label).join(', ')}]: ${prompt}`
       : prompt;
 
+    const images = atts
+      .map(a => a.croppedDataUrl)
+      .filter((url): url is string => Boolean(url && url.startsWith('data:image/')));
+
     setAttachments([]);
     if (isConnected) {
       try {
-        await dispatchTask(fullPrompt);
+        await dispatchTask(fullPrompt, images.length > 0 ? images : undefined);
       } catch (e) {
         console.error('Task execution error:', e);
       }

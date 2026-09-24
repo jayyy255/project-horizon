@@ -150,14 +150,14 @@ export class AgentClient {
     return res.json();
   }
 
-  public async executeTask(prompt: string, sessionId?: string): Promise<ReActSessionState> {
+  public async executeTask(prompt: string, sessionId?: string, images?: string[]): Promise<ReActSessionState> {
     if (this.isElectronMode() && window.horizonAPI?.executeTask) {
-      return await window.horizonAPI.executeTask({ prompt, sessionId });
+      return await window.horizonAPI.executeTask({ prompt, sessionId, images });
     }
     const res = await fetch(`${this.config.httpBaseUrl}/api/task/execute`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, sessionId }),
+      body: JSON.stringify({ prompt, sessionId, images }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));

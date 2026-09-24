@@ -42,7 +42,7 @@ contextBridge.exposeInMainWorld('horizonAPI', {
   getSystemInfo: () => ipcRenderer.invoke('horizon:get-system-info'),
 
   // Step 4c: In-process agent coordinator IPC
-  executeTask: (payload: { prompt: string; sessionId?: string }) =>
+  executeTask: (payload: { prompt: string; sessionId?: string; images?: string[] }) =>
     ipcRenderer.invoke('horizon:execute-task', payload),
   resolveTier2: (payload: { actionId: string; authorized: boolean }) =>
     ipcRenderer.invoke('horizon:resolve-tier2', payload),

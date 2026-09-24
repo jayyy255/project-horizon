@@ -5,8 +5,9 @@
  * the Electron Main environment WITHOUT requiring Fastify port 4100.
  */
 
-const { app } = require('electron');
 const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env'), override: true });
+const { app } = require('electron');
 
 async function runStep4cTest() {
   console.log('[Step 4c Test] Starting In-Process Electron Agent Verification...');

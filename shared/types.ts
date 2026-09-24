@@ -54,7 +54,7 @@ export interface HorizonAPI {
   sendTier2Decision: (actionId: string, authorized: boolean) => Promise<void>;
   getSystemInfo: () => Promise<SystemInfo>;
   // In-process ReAct Agent methods (Step 4c)
-  executeTask: (payload: { prompt: string; sessionId?: string }) => Promise<any>;
+  executeTask: (payload: { prompt: string; sessionId?: string; images?: string[] }) => Promise<any>;
   resolveTier2: (payload: { actionId: string; authorized: boolean }) => Promise<any>;
   getAgentState: () => Promise<any>;
   searchIndexer: (payload: { query: string; limit?: number }) => Promise<any[]>;

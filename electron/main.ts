@@ -14,14 +14,14 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { AgentHost } from './agent';
 
-// Load .env from root workspace or packaged app path
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+// Load .env from root workspace or packaged app path with override: true
+dotenv.config({ path: path.resolve(process.cwd(), '.env'), override: true });
 if (!process.env.GEMINI_API_KEY) {
-  dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+  dotenv.config({ path: path.resolve(__dirname, '../../.env'), override: true });
 }
 if (!process.env.GEMINI_API_KEY) {
   try {
-    dotenv.config({ path: path.resolve(app.getAppPath(), '.env') });
+    dotenv.config({ path: path.resolve(app.getAppPath(), '.env'), override: true });
   } catch {
     // ignore if app is not ready yet
   }

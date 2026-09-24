@@ -19,6 +19,7 @@ export interface ReActStep {
 export interface ReActSessionState {
   sessionId: string;
   taskPrompt: string;
+  images?: string[];
   status: 'idle' | 'working' | 'done' | 'error' | 'awaiting_tier2';
   currentNarration: string;
   currentTool?: string;
@@ -86,11 +87,13 @@ export class AgentCoordinator {
     prompt: string,
     plannerOverride?: (
       state: ReActSessionState
-    ) => Promise<{ action?: ProposedAction; finalAnswer?: string }>
+    ) => Promise<{ action?: ProposedAction; finalAnswer?: string }>,
+    images?: string[]
   ): Promise<ReActSessionState> {
     this.activeSession = {
       sessionId,
       taskPrompt: prompt,
+      images,
       status: 'working',
       currentNarration: 'Analyzing task and searching workspace...',
       steps: [],
@@ -335,106 +338,11 @@ export class AgentCoordinator {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey || apiKey === 'your_gemini_api_key_here') return null;
 
-    // Main: Gemini 2.5 Flash | Fallback: Gemini 2.5 Flash-Lite
-    const mainModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-    const fallbackModel = process.env.GEMINI_FALLBACK_MODEL || process.env.GEMINI_FAST_MODEL || 'gemini-2.5-flash-lite';
-
-    const candidateModels = [
-      mainModel,
-      fallbackModel,
-      'gemini-2.0-flash',
-      'gemini-2.0-flash-lite',
-      'gemini-1.5-flash',
-    ];
-
-    for (let i = 0; i < candidateModels.length; i++) {
-      const model = candidateModels[i];
-      try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-        const systemInstruction = `You are Project Horizon, an autonomous multimodal Windows desktop agent using ${model}.
-Available tools:
-- find_path(search_term: string): Search local workspace using SQLite FTS5 for files/projects.
-- launch_app(executable_path: string, args?: string[]): Launch local Windows application.
-- focus_window(process_name?: string, window_title?: string): Focus a window.
-- inspect_viewport(): Retrieve on-screen UI elements.
-- click_element(tag_id: number): Click on-screen element using Bézier curve.
-- type_text(text: string, press_enter?: boolean): Type text.
-
-Respond ONLY with a valid JSON object matching:
-{
-  "thought": "Internal chain-of-thought",
-  "narration": "User-facing concise explanation",
-  "tool_name": "tool_name_here" (or null if task finished),
-  "args": { ... },
-  "final_answer": "Final message once complete" (or null if calling tool)
-}`;
-
-        const historySummary = state.steps.map(s =>
-          `Step ${s.stepIndex}: Tool=${s.toolName}, Args=${JSON.stringify(s.args)}, Status=${s.status}`
-        ).join('\n');
-
-        const userContent = `Task: "${state.taskPrompt}"\n\nHistory:\n${historySummary || 'None'}`;
-
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: `${systemInstruction}\n\n${userContent}` }] }],
-            generationConfig: {
-              temperature: 0.1,
-              responseMimeType: 'application/json'
-            }
-          })
-        });
-
-        if (res.status === 404 || res.status === 503 || res.status === 429) {
-          // Model unavailable or rate-limited; immediately failover to fallback
-          console.warn(`[GeminiPlanner] ${model} unavailable (HTTP ${res.status}). Failing over to next candidate...`);
-          continue;
-        }
-
-        if (!res.ok) {
-          if (!this.warnedInvalidKey) {
-            console.warn(`[GeminiPlanner] Notice: Google AI API returned HTTP ${res.status} for model ${model}. Operating with autonomous offline planner.`);
-            this.warnedInvalidKey = true;
-          }
-          return null;
-        }
-
-        const data = await res.json();
-        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!rawText) continue;
-
-        const parsed = JSON.parse(rawText);
-        if (parsed.tool_name) {
-          return {
-            action: {
-              tool_name: parsed.tool_name,
-              args: parsed.args || {},
-              narration: parsed.narration || parsed.thought || `[${model}] Executing ${parsed.tool_name}`,
-              provenance: 'user_task',
-            }
-          };
-        } else if (parsed.final_answer) {
-          return {
-            finalAnswer: parsed.final_answer
-          };
-        }
-      } catch (err) {
-        console.warn(`[GeminiPlanner] Error calling ${model}, attempting fallback:`, err);
-      }
-    }
-    return null;
-  }
-
-  private async queryOllamaPlanner(
-    state: ReActSessionState
-  ): Promise<{ action?: ProposedAction; finalAnswer?: string } | null> {
-    const ollamaHost = process.env.OLLAMA_HOST || 'http://localhost:11434';
-    const ollamaModel = process.env.OLLAMA_MODEL || 'qwen2.5:3b';
-
+    // Main cloud planner: Gemini 3.5 Flash-Lite
+    const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
     try {
-      const systemInstruction = `You are Project Horizon, an autonomous multimodal Windows desktop agent running on local hardware via Ollama (${ollamaModel}).
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const systemInstruction = `You are Project Horizon, an autonomous multimodal Windows desktop agent using ${model}.
 Available tools:
 - find_path(search_term: string): Search local workspace using SQLite FTS5 for files/projects.
 - launch_app(executable_path: string, args?: string[]): Launch local Windows application.
@@ -458,30 +366,27 @@ Respond ONLY with a valid JSON object matching:
 
       const userContent = `Task: "${state.taskPrompt}"\n\nHistory:\n${historySummary || 'None'}`;
 
-      const res = await fetch(`${ollamaHost}/api/chat`, {
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: ollamaModel,
-          messages: [
-            { role: 'system', content: systemInstruction },
-            { role: 'user', content: userContent }
-          ],
-          format: 'json',
-          stream: false,
-          options: {
-            temperature: 0.1
+          contents: [{ role: 'user', parts: [{ text: `${systemInstruction}\n\n${userContent}` }] }],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: 'application/json'
           }
         }),
-        signal: AbortSignal.timeout(6000)
+        signal: AbortSignal.timeout(4000)
       });
 
       if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        console.warn(`[GeminiPlanner] ${model} returned HTTP ${res.status}: ${errText.substring(0, 150)}. Engaging Ollama fallback.`);
         return null;
       }
 
       const data = await res.json();
-      const rawText = data.message?.content;
+      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!rawText) return null;
 
       const parsed = JSON.parse(rawText);
@@ -490,7 +395,7 @@ Respond ONLY with a valid JSON object matching:
           action: {
             tool_name: parsed.tool_name,
             args: parsed.args || {},
-            narration: parsed.narration || parsed.thought || `[Ollama:${ollamaModel}] Executing ${parsed.tool_name}`,
+            narration: parsed.narration || parsed.thought || `[${model}] Executing ${parsed.tool_name}`,
             provenance: 'user_task',
           }
         };
@@ -499,11 +404,121 @@ Respond ONLY with a valid JSON object matching:
           finalAnswer: parsed.final_answer
         };
       }
-    } catch {
-      // Ollama not responding or timed out -> silently fallback to deterministic rule planner
+    } catch (err) {
+      console.warn(`[GeminiPlanner] Error calling ${model}, falling back to Ollama:`, err);
     }
     return null;
   }
+
+  public isVisualOrOCRTask(state: ReActSessionState): boolean {
+    if (state.images && state.images.length > 0) return true;
+    const prompt = state.taskPrompt.toLowerCase();
+    const visualKeywords = [
+      'image', 'screenshot', 'screen', 'crop', 'visual', 'ocr', 
+      'extract text', 'read text', 'read screen', 'inspect', 
+      'photo', 'picture', 'lasso', 'viewport', 'button', 'icon'
+    ];
+    if (visualKeywords.some(k => prompt.includes(k))) return true;
+    if (state.steps.some(s => s.toolName === 'inspect_viewport')) return true;
+    return false;
+  }
+
+  private async queryOllamaPlanner(
+    state: ReActSessionState
+  ): Promise<{ action?: ProposedAction; finalAnswer?: string } | null> {
+    const ollamaHost = process.env.OLLAMA_HOST || 'http://localhost:11434';
+    const isVisual = this.isVisualOrOCRTask(state);
+
+    // User preference: Llama 3.2 Vision for images and OCR, Qwen 2.5 for other normal tasks
+    const visionModel = process.env.OLLAMA_VISION_MODEL || 'llama3.2-vision';
+    const textModel = process.env.OLLAMA_TEXT_MODEL || 'qwen2.5:3b';
+
+    const candidateOllamaModels = isVisual
+      ? [visionModel, 'llama3.2-vision:latest', 'llama3.2', textModel, 'qwen2.5:3b']
+      : [textModel, 'qwen2.5:3b', 'qwen2.5', 'llama3.2', visionModel];
+
+    const systemInstruction = `You are Project Horizon, an autonomous multimodal Windows desktop agent running locally via Ollama (${isVisual ? 'Vision' : 'Standard'} engine).
+Available tools:
+- find_path(search_term: string): Search local workspace using SQLite FTS5 for files/projects.
+- launch_app(executable_path: string, args?: string[]): Launch local Windows application.
+- focus_window(process_name?: string, window_title?: string): Focus a window.
+- inspect_viewport(): Retrieve on-screen UI elements.
+- click_element(tag_id: number): Click on-screen element using Bézier curve.
+- type_text(text: string, press_enter?: boolean): Type text.
+
+Respond ONLY with a valid JSON object matching:
+{
+  "thought": "Internal chain-of-thought",
+  "narration": "User-facing concise explanation",
+  "tool_name": "tool_name_here" (or null if task finished),
+  "args": { ... },
+  "final_answer": "Final message once complete" (or null if calling tool)
+}`;
+
+    const historySummary = state.steps.map(s =>
+      `Step ${s.stepIndex}: Tool=${s.toolName}, Args=${JSON.stringify(s.args)}, Status=${s.status}`
+    ).join('\n');
+
+    const userContent = `Task: "${state.taskPrompt}"\n\nHistory:\n${historySummary || 'None'}`;
+
+    for (const model of candidateOllamaModels) {
+      try {
+        const userMsg: { role: string; content: string; images?: string[] } = {
+          role: 'user',
+          content: userContent
+        };
+        if (isVisual && state.images && state.images.length > 0) {
+          userMsg.images = state.images.map(img => img.replace(/^data:image\/[a-z]+;base64,/, ''));
+        }
+
+        const res = await fetch(`${ollamaHost}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: 'system', content: systemInstruction },
+              userMsg
+            ],
+            format: 'json',
+            stream: false,
+            options: {
+              temperature: 0.1
+            }
+          }),
+          signal: AbortSignal.timeout(12000)
+        });
+
+        if (!res.ok) {
+          continue;
+        }
+
+        const data = await res.json();
+        const rawText = data.message?.content;
+        if (!rawText) continue;
+
+        const parsed = JSON.parse(rawText);
+        if (parsed.tool_name) {
+          return {
+            action: {
+              tool_name: parsed.tool_name,
+              args: parsed.args || {},
+              narration: parsed.narration || parsed.thought || `[Ollama:${model}] Executing ${parsed.tool_name}`,
+              provenance: 'user_task',
+            }
+          };
+        } else if (parsed.final_answer) {
+          return {
+            finalAnswer: parsed.final_answer
+          };
+        }
+      } catch {
+        // Try next candidate model
+      }
+    }
+    return null;
+  }
+
 
   private async defaultCLIFirstPlanner(
     state: ReActSessionState

@@ -29,11 +29,11 @@ export function useHorizonAgent() {
     };
   }, []);
 
-  const dispatchTask = useCallback(async (prompt: string) => {
+  const dispatchTask = useCallback(async (prompt: string, images?: string[]) => {
     setIsExecuting(true);
     setLastError(null);
     try {
-      const state = await agentClient.executeTask(prompt);
+      const state = await agentClient.executeTask(prompt, undefined, images);
       setSessionState(state);
       return state;
     } catch (err: any) {
