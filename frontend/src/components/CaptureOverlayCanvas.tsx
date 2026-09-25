@@ -98,7 +98,7 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
   }, [realScreenshot]);
 
   // Helper to extract relative cursor coordinates
-  const getRelativeCoords = useCallback((e: React.MouseEvent<HTMLDivElement>): Point | null => {
+  const getRelativeCoords = useCallback((e: React.MouseEvent<HTMLDivElement> | React.PointerEvent<HTMLDivElement>): Point | null => {
     if (!containerRef.current) return null;
     const rect = containerRef.current.getBoundingClientRect();
     const x = Math.round(e.clientX - rect.left);
@@ -106,10 +106,70 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
     return { x, y };
   }, []);
 
-  // Freehand Lasso Interaction Handlers
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Only left click
+  // Freehand Lasso Interaction Handlers (Pointer & Mouse)
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Only left click / primary pointer
     if (e.button !== 0) return;
+    const pt = getRelativeCoords(e);
+    if (!pt) return;
+
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // ignore if pointer capture unsupported
+    }
+
+    setIsDrawing(true);
+    setHasDrawn(true);
+    setPoints([pt]);
+    setBoundingBox(null);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDrawing) return;
+    const pt = getRelativeCoords(e);
+    if (!pt) return;
+
+    setPoints((prev) => {
+      if (prev.length === 0) return [pt];
+      const last = prev[prev.length - 1];
+      const distSq = (pt.x - last.x) ** 2 + (pt.y - last.y) ** 2;
+      // Throttle points: minimum 4px movement to maintain smooth Catmull-Rom curvature
+      if (distSq >= 16) {
+        const next = [...prev, pt];
+        // Compute live AABB with 12px padding while drawing
+        if (containerRef.current) {
+          const rect = containerRef.current.getBoundingClientRect();
+          const liveAABB = computeAABB(next, 12, { width: rect.width, height: rect.height });
+          setBoundingBox(liveAABB);
+        }
+        return next;
+      }
+      return prev;
+    });
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDrawing) return;
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+    } catch {
+      // ignore
+    }
+
+    setIsDrawing(false);
+
+    if (points.length >= 2 && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const finalAABB = computeAABB(points, 12, { width: rect.width, height: rect.height });
+      setBoundingBox(finalAABB);
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || isDrawing) return;
     const pt = getRelativeCoords(e);
     if (!pt) return;
 
@@ -128,10 +188,8 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
       if (prev.length === 0) return [pt];
       const last = prev[prev.length - 1];
       const distSq = (pt.x - last.x) ** 2 + (pt.y - last.y) ** 2;
-      // Throttle points: minimum 4px movement to maintain smooth Catmull-Rom curvature
       if (distSq >= 16) {
         const next = [...prev, pt];
-        // Compute live AABB while drawing
         if (containerRef.current) {
           const rect = containerRef.current.getBoundingClientRect();
           const liveAABB = computeAABB(next, 12, { width: rect.width, height: rect.height });
@@ -147,7 +205,7 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
     if (!isDrawing) return;
     setIsDrawing(false);
 
-    if (points.length >= 3 && containerRef.current) {
+    if (points.length >= 2 && containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
       const finalAABB = computeAABB(points, 12, { width: rect.width, height: rect.height });
       setBoundingBox(finalAABB);
@@ -168,7 +226,7 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
     setHasDrawn(true);
   };
 
-  // Crops the real desktop image using an offscreen canvas
+  // Crops the real desktop image using an offscreen canvas at native pixel density
   const createCroppedImage = useCallback(async (cropBox: BoundingBox): Promise<string | undefined> => {
     if (!realScreenshot || cropBox.w <= 0 || cropBox.h <= 0) return undefined;
     return new Promise((resolve) => {
@@ -189,11 +247,12 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
           const sw = Math.round(cropBox.w * scaleX);
           const sh = Math.round(cropBox.h * scaleY);
 
-          offscreen.width = Math.max(1, cropBox.w);
-          offscreen.height = Math.max(1, cropBox.h);
+          // Native physical pixel density
+          offscreen.width = Math.max(1, sw);
+          offscreen.height = Math.max(1, sh);
           const ctx = offscreen.getContext('2d');
           if (ctx) {
-            ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cropBox.w, cropBox.h);
+            ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
             resolve(offscreen.toDataURL('image/png'));
           } else {
             resolve(undefined);
@@ -250,11 +309,15 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
       {/* Desktop Background Canvas / Real Captured Screenshot */}
       <div 
         ref={containerRef}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        className={`w-full relative select-none transition-colors overflow-hidden ${
+        className={`w-full relative select-none transition-colors overflow-hidden touch-none ${
           isFullScreenOverlay ? 'h-screen w-screen' : 'h-[460px] cursor-crosshair'
         }`}
         style={{

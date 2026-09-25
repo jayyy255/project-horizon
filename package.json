@@ -22,7 +22,7 @@
     "test:capture:latency": "electron scripts/benchmark_capture_latency.js",
     "test:capture:multimonitor": "electron scripts/verify_multimonitor.js",
     "test:capture": "electron scripts/verify_real_desktop_pixels.js && electron scripts/benchmark_capture_latency.js && electron scripts/verify_multimonitor.js",
-    "test:lasso": "electron scripts/test_interactive_lasso.js",
+    "test:lasso": "node scripts/test_lasso_multimonitor_and_aabb.js && electron scripts/verify_real_lasso_crop.js",
     "test:step4c": "npm run build:electron && electron scripts/test_step4c_inprocess_agent.js",
     "test:gemini": "npm run build:electron && electron scripts/test_gemini_react_integration.js",
     "build:desktop": "npm run build:frontend && npm run build:electron",

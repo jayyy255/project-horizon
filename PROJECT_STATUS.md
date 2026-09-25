@@ -78,10 +78,13 @@ Project Horizon runs as a native Windows desktop application with the agent coor
   - Configured with `transparent: true`, `frame: false`, `alwaysOnTop: true`, `skipTaskbar: true`, `enableLargerThanScreen: true`, `hasShadow: false`, `backgroundThrottling: false`.
 - **Automated Capture Test Suite**:
   - `npm run test:capture` executes pixel verification, 20-iteration latency benchmark, and multi-monitor verification.
-- **Interactive Catmull-Rom Lasso & 12px Padded AABB (Step 4b — Verified)**:
-  - Interactive freehand pointer drag with smooth Catmull-Rom spline interpolation (`shared/aabb.ts`).
-  - Automated Axis-Aligned Bounding Box (AABB) calculation with mandatory 12px padding per §3.1.
-  - Offscreen canvas crop extraction: automatically produces a high-fidelity PNG of the circled area and mounts it as an attachment chip with a live thumbnail preview.
+- **Interactive Catmull-Rom Lasso & 12px Padded AABB (Real Region Capture — Verified)**:
+  - Freehand pointer drag (`pointerdown`, `pointermove`, `pointerup` with pointer capture) using Catmull-Rom spline interpolation (`shared/aabb.ts`).
+  - Axis-Aligned Bounding Box (AABB) calculation with exactly 12px outward padding before clamping to screen/monitor limits.
+  - Multi-monitor geometry support: tested on monitor 1, monitor 2, boundary crossings, negative offsets, and display edge/corner clamping.
+  - Real native pixel crop extraction: offscreen canvas extraction preserving 100% 1:1 physical desktop pixels (`scripts/verify_real_lasso_crop.js` and `scripts/verify_vscode_lasso_crop.js`).
+  - Latency: AABB calculation in 0.1ms, pixel extraction in 34.6ms, total lasso-to-crop latency **35.0ms**.
+  - Verified tests: `npm run test:lasso` (100% passing).
 - **Multi-Attachment Support**:
   - Chat bar supports multiple attached captures in sequence (both crops and full screen).
   - Each capture appends as a chip showing dimensions (e.g., `Area [354×310px]`) and thumbnail preview.

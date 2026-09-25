@@ -13,11 +13,13 @@ export interface BoundingBox {
 export interface ScreenDimensions {
   width: number;
   height: number;
+  x?: number; // Origin offset for multi-monitor setups (default: 0)
+  y?: number; // Origin offset for multi-monitor setups (default: 0)
 }
 
 /**
  * Computes the Axis-Aligned Bounding Box (AABB) enclosing freehand lasso points
- * with the specified padding (default 12px per Project Horizon §3.1).
+ * with exactly 12px outward padding per Project Horizon §3.1 before clamping to monitor bounds.
  */
 export function computeAABB(
   points: Point[],
@@ -47,27 +49,44 @@ export function computeAABB(
     return { x: 0, y: 0, w: 0, h: 0 };
   }
 
-  // Apply padding (12px standard)
-  let paddedX = Math.floor(minX - padding);
-  let paddedY = Math.floor(minY - padding);
-  let paddedMaxX = Math.ceil(maxX + padding);
-  let paddedMaxY = Math.ceil(maxY + padding);
+  // Exactly 12px outward padding before clamping
+  const paddedMinX = Math.floor(minX - padding);
+  const paddedMinY = Math.floor(minY - padding);
+  const paddedMaxX = Math.ceil(maxX + padding);
+  const paddedMaxY = Math.ceil(maxY + padding);
 
-  // Clamp to non-negative screen space
-  paddedX = Math.max(0, paddedX);
-  paddedY = Math.max(0, paddedY);
+  const boundMinX = screenLimit?.x ?? 0;
+  const boundMinY = screenLimit?.y ?? 0;
 
   if (screenLimit) {
-    paddedMaxX = Math.min(screenLimit.width, paddedMaxX);
-    paddedMaxY = Math.min(screenLimit.height, paddedMaxY);
+    const boundMaxX = boundMinX + screenLimit.width;
+    const boundMaxY = boundMinY + screenLimit.height;
+
+    const clampedX = Math.max(boundMinX, paddedMinX);
+    const clampedY = Math.max(boundMinY, paddedMinY);
+    const clampedMaxX = Math.min(boundMaxX, paddedMaxX);
+    const clampedMaxY = Math.min(boundMaxY, paddedMaxY);
+
+    const w = Math.max(0, clampedMaxX - clampedX);
+    const h = Math.max(0, clampedMaxY - clampedY);
+
+    return {
+      x: clampedX,
+      y: clampedY,
+      w,
+      h,
+    };
   }
 
-  const w = Math.max(0, paddedMaxX - paddedX);
-  const h = Math.max(0, paddedMaxY - paddedY);
+  // Clamped to non-negative by default when no screenLimit specified
+  const clampedX = Math.max(boundMinX, paddedMinX);
+  const clampedY = Math.max(boundMinY, paddedMinY);
+  const w = Math.max(0, paddedMaxX - clampedX);
+  const h = Math.max(0, paddedMaxY - clampedY);
 
   return {
-    x: paddedX,
-    y: paddedY,
+    x: clampedX,
+    y: clampedY,
     w,
     h,
   };
