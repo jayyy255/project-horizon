@@ -48,43 +48,41 @@ export async function captureRealDesktop(): Promise<DesktopScreenshotResult> {
     video.playsInline = true;
     video.srcObject = stream;
 
-    video.onloadedmetadata = () => {
+    video.onloadeddata = () => {
       video.play().catch(reject);
-      setTimeout(() => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            throw new Error('Failed to create canvas 2d context for desktop capture');
-          }
-
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL('image/png');
-
-          // Release video stream tracks
-          stream.getTracks().forEach((track) => track.stop());
-          video.srcObject = null;
-
-          console.log(
-            `[Project Horizon] Real desktop capture frame grabbed: ${canvas.width}x${canvas.height}px (${Math.round(
-              dataUrl.length / 1024
-            )} KB)`
-          );
-
-          resolve({
-            dataUrl,
-            width: canvas.width,
-            height: canvas.height,
-            sourceId: screenSource.id,
-            sourceName: screenSource.name,
-          });
-        } catch (err) {
-          stream.getTracks().forEach((track) => track.stop());
-          reject(err);
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          throw new Error('Failed to create canvas 2d context for desktop capture');
         }
-      }, 150);
+
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/png');
+
+        // Release video stream tracks
+        stream.getTracks().forEach((track) => track.stop());
+        video.srcObject = null;
+
+        console.log(
+          `[Project Horizon] Real desktop capture frame grabbed: ${canvas.width}x${canvas.height}px (${Math.round(
+            dataUrl.length / 1024
+          )} KB)`
+        );
+
+        resolve({
+          dataUrl,
+          width: canvas.width,
+          height: canvas.height,
+          sourceId: screenSource.id,
+          sourceName: screenSource.name,
+        });
+      } catch (err) {
+        stream.getTracks().forEach((track) => track.stop());
+        reject(err);
+      }
     };
 
     video.onerror = (err) => {

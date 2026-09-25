@@ -163,19 +163,20 @@ function createMainWindow(): BrowserWindow {
 
 function createOverlayWindow(): BrowserWindow {
   const displays = screen.getAllDisplays();
-  let totalWidth = 0;
-  let maxHeight = 0;
+  let minX = 0, minY = 0, maxX = 0, maxY = 0;
 
   for (const d of displays) {
-    totalWidth += d.bounds.width;
-    if (d.bounds.height > maxHeight) maxHeight = d.bounds.height;
+    minX = Math.min(minX, d.bounds.x);
+    minY = Math.min(minY, d.bounds.y);
+    maxX = Math.max(maxX, d.bounds.x + d.bounds.width);
+    maxY = Math.max(maxY, d.bounds.y + d.bounds.height);
   }
 
   overlayWindow = new BrowserWindow({
-    x: 0,
-    y: 0,
-    width: totalWidth,
-    height: maxHeight,
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
     transparent: true,
     frame: false,
     alwaysOnTop: true,
@@ -188,6 +189,7 @@ function createOverlayWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      backgroundThrottling: false,
     },
   });
 
@@ -201,6 +203,7 @@ function createOverlayWindow(): BrowserWindow {
 }
 
 async function triggerRealCaptureAndShowOverlay(): Promise<void> {
+  const t0 = performance.now();
   try {
     // 1. Capture real desktop screenshot first
     const captureData = await captureRealDesktop();
@@ -219,6 +222,9 @@ async function triggerRealCaptureAndShowOverlay(): Promise<void> {
     overlayWindow?.show();
     overlayWindow?.focus();
 
+    const tReady = performance.now();
+    console.log(`[Project Horizon] Real desktop capture -> overlay ready in ${(tReady - t0).toFixed(2)} ms`);
+
     mainWindow?.webContents.send('horizon:overlay-toggled', true);
   } catch (err) {
     console.error('[Project Horizon] Failed to capture real desktop:', err);
@@ -226,9 +232,12 @@ async function triggerRealCaptureAndShowOverlay(): Promise<void> {
 }
 
 function hideOverlay(): void {
+  const t0 = performance.now();
   isOverlayVisible = false;
   overlayWindow?.hide();
   mainWindow?.webContents.send('horizon:overlay-toggled', false);
+  const t1 = performance.now();
+  console.log(`[Project Horizon] Overlay dismissed via Escape in ${(t1 - t0).toFixed(2)} ms`);
 }
 
 function toggleOverlay(): void {

@@ -1,7 +1,8 @@
 # Project Horizon specific ignores
 project-horizon.md
-PROJECT_STATUS.md
 /ui
+*.obj
+*.exe
 
 # Dependencies
 node_modules/
