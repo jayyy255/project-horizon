@@ -111,6 +111,30 @@ export class AgentCoordinator {
 
     this.notify();
 
+    // 0. Ground attached images via local perception engine if present
+    if (images && images.length > 0) {
+      this.activeSession.currentNarration = 'Analyzing image with local perception engine (YOLOv8 + OCR)...';
+      this.notify();
+      try {
+        const rawB64 = images[0].replace(/^data:image\/[a-z]+;base64,/, '');
+        const somRes = await fetch('http://127.0.0.1:4200/api/parse_som', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image_base64: rawB64 }),
+          signal: AbortSignal.timeout(25000),
+        });
+        if (somRes.ok) {
+          const somData = await somRes.json();
+          if (somData.elements && Array.isArray(somData.elements)) {
+            this.setFrameTags(somData.elements);
+            console.log(`[AgentCoordinator] Perception grounded ${somData.elements.length} UI elements in ${somData.latency_ms || 0} ms`);
+          }
+        }
+      } catch (err) {
+        console.warn('[AgentCoordinator] Perception grounding warning:', err);
+      }
+    }
+
     for (let turn = 0; turn < 10; turn++) {
       if (this.inputSynthesizer.isPanicAborted()) {
         this.activeSession.status = 'error';
@@ -385,8 +409,10 @@ Available tools:
 - type_text(text: string, press_enter?: boolean): Type text.
 
 Strategy:
+- If asked a visual question about an attached image (e.g. "What application is this?", "What is shown here?", "Read the screen/text"), analyze the image and detected perception tags directly. Return the answer in "final_answer", with a concise summary in "narration", and set "tool_name": null. Do NOT propose tool calls if the question is answerable from the visual attachment.
 - If asked to open/find a project/folder and you don't know the exact path yet, call find_path first.
 - Once find_path returns a path, call launch_app to open it (e.g. executable_path "C:/Program Files/Microsoft VS Code/Code.exe" or "code" with args [path]).
+- If launch_app succeeds and the application was launched, evaluate the result and complete the task with "final_answer" verification.
 - If asked to clean or delete cache/files (e.g. rmdir), call launch_app with the shell command (this will trigger Tier 2 Safety Gate).
 - If all steps are complete or answering a question, return final_answer.
 
@@ -403,13 +429,36 @@ Respond ONLY with a valid JSON object matching:
         `Step ${s.stepIndex}: Tool=${s.toolName}, Args=${JSON.stringify(s.args)}, Status=${s.status}, Result=${JSON.stringify(s.result)}`
       ).join('\n');
 
-      const userContent = `Task: "${state.taskPrompt}"\n\nHistory of executed steps and results:\n${historySummary || 'None'}`;
+      let userContent = `Task: "${state.taskPrompt}"\n\n`;
+
+      if (this.activeFrameLookup.size > 0) {
+        const somElements = Array.from(this.activeFrameLookup.values()).slice(0, 25);
+        userContent += `Perception Grounding State (Detected Set-of-Marks Elements):\n` +
+          somElements.map(e => `  [Tag ${e.tag_id}] Type: ${e.type}, Label: "${e.label || 'unlabeled'}", Center: (${e.center[0]}, ${e.center[1]}), BBox: [${e.coords.join(', ')}]`).join('\n') +
+          `\n\n`;
+      }
+
+      userContent += `History of executed steps and results:\n${historySummary || 'None'}`;
+
+      const parts: any[] = [{ text: `${systemInstruction}\n\n${userContent}` }];
+
+      if (state.images && state.images.length > 0) {
+        for (const img of state.images) {
+          const rawB64 = img.replace(/^data:image\/[a-z]+;base64,/, '');
+          parts.push({
+            inline_data: {
+              mime_type: 'image/png',
+              data: rawB64,
+            },
+          });
+        }
+      }
 
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: `${systemInstruction}\n\n${userContent}` }] }],
+          contents: [{ role: 'user', parts }],
           generationConfig: {
             temperature: 0.1,
             responseMimeType: 'application/json'

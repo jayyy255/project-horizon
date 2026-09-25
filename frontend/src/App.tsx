@@ -187,12 +187,37 @@ export default function App() {
     setIsChatVisible(true);
   };
 
-  const handleQuickFullScreenCapture = () => {
+  const handleQuickFullScreenCapture = async () => {
+    if (typeof window !== 'undefined' && window.horizonAPI) {
+      try {
+        const data = await window.horizonAPI.captureDesktop();
+        if (data && data.dataUrl) {
+          handleAddAttachment({
+            type: 'fullscreen',
+            label: 'Full Screen',
+            coords: { x: 0, y: 0, w: data.width, h: data.height },
+            croppedDataUrl: data.dataUrl,
+          });
+          return;
+        }
+      } catch (err) {
+        console.warn('captureDesktop failed in handleQuickFullScreenCapture:', err);
+      }
+    }
     handleAddAttachment({
       type: 'fullscreen',
       label: 'Full Screen',
-      coords: { x: 0, y: 0, w: 1920, h: 1080 }
+      coords: { x: 0, y: 0, w: 1920, h: 1080 },
+      croppedDataUrl: realScreenshotUrl || undefined,
     });
+  };
+
+  const handleTriggerLasso = () => {
+    if (typeof window !== 'undefined' && window.horizonAPI) {
+      window.horizonAPI.toggleOverlay();
+    } else {
+      setIsCaptureActive(true);
+    }
   };
 
   const handleRemoveAttachment = (id: string) => {
@@ -670,7 +695,7 @@ export default function App() {
                       attachments={attachments}
                       onRemoveAttachment={handleRemoveAttachment}
                       onClearAttachments={handleClearAttachments}
-                      onTriggerLasso={() => setIsCaptureActive(true)}
+                      onTriggerLasso={handleTriggerLasso}
                       onTriggerFullScreen={handleQuickFullScreenCapture}
                       onSubmitPrompt={handleTaskSubmit}
                     />

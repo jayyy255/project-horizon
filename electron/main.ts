@@ -11,6 +11,7 @@ import {
 } from 'electron';
 import fs from 'fs';
 import path from 'path';
+import { spawn } from 'child_process';
 import dotenv from 'dotenv';
 import { AgentHost } from './agent';
 
@@ -72,7 +73,7 @@ async function captureRealDesktop(): Promise<{
   try {
     const sources = await desktopCapturer.getSources({
       types: ['screen'],
-      thumbnailSize: { width: 1, height: 1 },
+      thumbnailSize: { width, height },
       fetchWindowIcons: false,
     });
 
@@ -80,6 +81,7 @@ async function captureRealDesktop(): Promise<{
       const source = sources[0];
       sourceId = source.id;
       displayLabel = source.name || 'Entire Screen';
+      dataUrl = source.thumbnail.toDataURL();
     }
   } catch (err) {
     console.warn('[Project Horizon] desktopCapturer.getSources warning:', err);
@@ -311,7 +313,40 @@ function setupSystemTray(): void {
   });
 }
 
+function spawnPerceptionServiceIfNeeded(): void {
+  const healthUrl = 'http://127.0.0.1:4200/health';
+  fetch(healthUrl, { signal: AbortSignal.timeout(1000) })
+    .then((r) => {
+      if (r.ok) {
+        console.log('[Project Horizon] Local Perception Service is healthy on port 4200.');
+      }
+    })
+    .catch(() => {
+      const candidates = [
+        path.resolve(process.cwd(), 'backend/perception-service/.venv/Scripts/python.exe'),
+        path.resolve(__dirname, '../../backend/perception-service/.venv/Scripts/python.exe'),
+        path.resolve(app.getAppPath(), 'backend/perception-service/.venv/Scripts/python.exe'),
+      ];
+      const srvCandidates = [
+        path.resolve(process.cwd(), 'backend/perception-service/server.py'),
+        path.resolve(__dirname, '../../backend/perception-service/server.py'),
+        path.resolve(app.getAppPath(), 'backend/perception-service/server.py'),
+      ];
+      const pyExe = candidates.find(p => fs.existsSync(p));
+      const srvScript = srvCandidates.find(p => fs.existsSync(p));
+      if (pyExe && srvScript) {
+        console.log('[Project Horizon] Launching background Perception Microservice on port 4200...');
+        const child = spawn(pyExe, [srvScript], {
+          detached: true,
+          stdio: 'ignore',
+        });
+        child.unref();
+      }
+    });
+}
+
 app.whenReady().then(() => {
+  spawnPerceptionServiceIfNeeded();
   agentHost = new AgentHost();
   createMainWindow();
   createOverlayWindow();

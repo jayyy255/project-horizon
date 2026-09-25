@@ -246,29 +246,51 @@ With the completion of Step 4 (Desktop Restructuring & Packaging), all core func
 
 ---
 
-## 6. Summary Checklist & Deliverables
+### 3.9 Reconnected Agent, Perception & UI Pipeline (Phase 3 Verified)
+- **Real Capture → Attachment**:
+  - Full-screen and region lasso crops flow directly into the attachment chip system with actual image bytes (`croppedDataUrl: "data:image/png;base64,..."`).
+  - Offscreen canvas crop extraction at 1:1 physical pixel density preserved.
+  - Chat bar displays visual attachment thumbnail chips with remove and clear-all capabilities.
+- **Reconnected Perception Microservice**:
+  - Automatically verified and spawned in background on port `4200` (`backend/perception-service/server.py`).
+  - `/api/parse_som` processes real image crops through YOLOv8 ONNX and RapidOCR, outputting tagged UI elements (`tag_id`, `coords`, `center`, `size`, `type`, `label`) and annotated Set-of-Marks images.
+  - Agent Coordinator grounds elements in `activeFrameLookup` lookup table.
+- **Reconnected Gemini Multimodal ReAct Planner**:
+  - Autonomous dynamic planning via Google Gemini 3.5 Flash-Lite HTTPS API (`generativelanguage.googleapis.com`).
+  - Multimodal input: sends task prompt, grounded perception context tags, step history, and inline image parts (`inline_data`).
+  - Direct visual question-answering ("What application is this?") returns visual analysis directly in `final_answer` without hallucinating tool calls.
+  - Complex automation tasks ("Open my code scanner project in VS Code") dynamically propose `find_path` -> `launch_app` -> verification.
+- **Deterministic Safety Gate Enforcement**:
+  - Every proposed action is intercepted and verified by `SafetyGate.evaluate()`.
+  - Tier 1 actions (`find_path`, `launch_app`, `focus_window`, `click_element`) authorized automatically.
+  - Tier 2 destructive actions (e.g. `rmdir`, PowerShell script execution) trigger user confirmation modal.
+  - Full audit logging to encrypted SQLite audit database.
+- **Real-Time HUD Narration & Execution Trace**:
+  - Live state updates broadcasted from coordinator to `HUDCollapsedChip` and `ReActTracePanel`.
+  - Displays actual live execution narration ("Analyzing image with local perception engine...", "Searching for the code scanner project path...", "Launching the code scanner project in VS Code.", "Verified: Successfully opened your code scanner project in VS Code.").
+- **Automated End-to-End Verification (`npm run test:e2e`)**:
+  - **Task 1 ("What application is this?")**: Real capture -> real crop -> perception grounded 26 UI elements in 7499ms -> Gemini visual reasoning answered in 3194ms: *"This is a Valorant tactical map and match analysis tool displayed inside a web browser."*
+  - **Task 2 ("Open my code scanner project in VS Code")**: FTS5 `find_path` -> `launch_app` -> verification in 4549ms.
+
+---
+
+## 4. Summary Checklist & Deliverables
 
 | Specification Area | Status | Evidence / Implementation File |
 |---|---|---|
 | Native Windows Desktop Shell | Completed | `electron/main.ts`, `electron/preload.ts` |
-| Real Full-Screen Desktop Capture | Completed | `desktopCapturer` + WebRTC (§3.1) |
-| Interactive Catmull-Rom Lasso | Completed | `CaptureOverlayCanvas.tsx`, `shared/aabb.ts` |
+| Real Full-Screen Desktop Capture | Completed | `desktopCapturer` + WebRTC DWM Stream (`test:capture:pixels`) |
+| Interactive Catmull-Rom Lasso | Completed | `CaptureOverlayCanvas.tsx`, `shared/aabb.ts` (`test:lasso`) |
 | 12px Padded AABB Bounding Box | Completed | `shared/aabb.ts`, `computeAABB()` |
-| Offscreen Canvas Crop Thumbnail | Completed | `ContextualPromptBar.tsx` attachment chips |
-| In-Process Agent Coordinator | Completed | `electron/agent/index.ts`, `coordinator.ts` |
-| SQLite FTS5 Indexer (≤15ms) | Completed | `electron/agent/indexer.ts` (0.97ms) & `backend/agent-service/src/indexer/fts5_indexer.ts` |
-| VIPI Defense & Two-Tier Gate | Completed | `electron/agent/gate.ts`, `Tier2Modal.tsx`, `scripts/verify_vipi_defense.js` |
-| Hardware Panic Killswitch | Completed | `electron/agent/synthesizer.ts` (0.181ms ≤ 20ms) |
-| Encrypted Audit DB & PII Masking | Completed | `electron/agent/db.ts` |
-| Fluid Liquid-Glass UI & Theme | Completed | `frontend/src/index.css`, `frontend/src/App.tsx` |
+| Real Capture → Attachment Flow | Completed | `ContextualPromptBar.tsx` attachment chips with image bytes |
+| Reconnected Perception (YOLOv8 + OCR + SoM) | Completed | `backend/perception-service/server.py`, `:4200/api/parse_som` |
+| Reconnected Gemini Multimodal ReAct | Completed | `electron/agent/coordinator.ts` (`queryGeminiPlanner`) |
+| Reconnected Deterministic Safety Gate | Completed | `electron/agent/gate.ts`, `SafetyGate.evaluate()` |
+| Reconnected HUD & Live Trace | Completed | `HUDCollapsedChip.tsx`, `ReActTracePanel.tsx`, IPC streaming |
+| Full End-to-End Pipeline Test | Completed | `npm run test:e2e` (`scripts/verify_reconnected_e2e.js`) |
 | Standalone Windows Executable | Completed | `release/win-unpacked/Project Horizon.exe` |
 | NSIS Windows Setup Installer | Completed | `release/Project Horizon-Setup-1.0.0.exe` |
-| Custom 512×512 App Branding Icon | Completed | `build/icon.ico`, `build/icon.png` |
-| Real Gemini ReAct Integration | Completed | `scripts/test_gemini_react_integration.js`, `queryGeminiPlanner` (live HTTPS) |
-| Real YOLOv8 + RapidOCR Perception | Completed | `backend/perception-service/detector.py`, `models/yolov8n.onnx` |
-| Automated Test Suite (47+ tests) | Completed | `npm run test:all`, `npm run test:gemini`, `npm run test:step4c` |
 | Security Vulnerability Audit | Completed | `npm run security-check` (0 vulnerabilities) |
-
 
 ---
 *Report Updated: September 2026*  
