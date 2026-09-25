@@ -11,6 +11,16 @@ files:
   - "frontend/dist/**/*"
   - "package.json"
 
+extraResources:
+  - from: "backend/perception-service"
+    to: "perception-service"
+    filter:
+      - "**/*"
+      - "!**/__pycache__"
+      - "!**/.pytest_cache"
+  - from: ".env"
+    to: ".env"
+
 win:
   icon: "build/icon.ico"
   target:

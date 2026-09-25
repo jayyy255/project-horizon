@@ -12,20 +12,39 @@ import {
 import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
-import dotenv from 'dotenv';
 import { AgentHost } from './agent';
+import { runPackagedVerification } from './packagedVerification';
 
-// Load .env from root workspace or packaged app path with override: true
-dotenv.config({ path: path.resolve(process.cwd(), '.env'), override: true });
-if (!process.env.GEMINI_API_KEY) {
-  dotenv.config({ path: path.resolve(__dirname, '../../.env'), override: true });
-}
-if (!process.env.GEMINI_API_KEY) {
+function loadEnvFile(envPath: string) {
   try {
-    dotenv.config({ path: path.resolve(app.getAppPath(), '.env'), override: true });
-  } catch {
-    // ignore if app is not ready yet
-  }
+    if (fs.existsSync(envPath)) {
+      const content = fs.readFileSync(envPath, 'utf8');
+      for (const rawLine of content.split('\n')) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith('#')) continue;
+        const eqIdx = line.indexOf('=');
+        if (eqIdx > 0) {
+          const key = line.slice(0, eqIdx).trim();
+          let val = line.slice(eqIdx + 1).trim();
+          if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+            val = val.slice(1, -1);
+          }
+          // Always assign to override any stale/invalid env variables from parent shell
+          process.env[key] = val;
+        }
+      }
+    }
+  } catch {}
+}
+
+// Load .env candidates without requiring external npm packages
+const envCandidates = [
+  path.resolve(process.cwd(), '.env'),
+  path.resolve(__dirname, '../../.env'),
+  path.resolve(process.resourcesPath || '', '.env'),
+];
+for (const p of envCandidates) {
+  loadEnvFile(p);
 }
 if (process.env.GEMINI_API_KEY) {
   console.log('[Project Horizon] Gemini API Key loaded successfully from .env');
@@ -323,11 +342,13 @@ function spawnPerceptionServiceIfNeeded(): void {
     })
     .catch(() => {
       const candidates = [
+        path.resolve(process.resourcesPath || '', 'perception-service/.venv/Scripts/python.exe'),
         path.resolve(process.cwd(), 'backend/perception-service/.venv/Scripts/python.exe'),
         path.resolve(__dirname, '../../backend/perception-service/.venv/Scripts/python.exe'),
         path.resolve(app.getAppPath(), 'backend/perception-service/.venv/Scripts/python.exe'),
       ];
       const srvCandidates = [
+        path.resolve(process.resourcesPath || '', 'perception-service/server.py'),
         path.resolve(process.cwd(), 'backend/perception-service/server.py'),
         path.resolve(__dirname, '../../backend/perception-service/server.py'),
         path.resolve(app.getAppPath(), 'backend/perception-service/server.py'),
@@ -335,8 +356,9 @@ function spawnPerceptionServiceIfNeeded(): void {
       const pyExe = candidates.find(p => fs.existsSync(p));
       const srvScript = srvCandidates.find(p => fs.existsSync(p));
       if (pyExe && srvScript) {
-        console.log('[Project Horizon] Launching background Perception Microservice on port 4200...');
+        console.log(`[Project Horizon] Launching background Perception Microservice from ${srvScript} on port 4200...`);
         const child = spawn(pyExe, [srvScript], {
+          cwd: path.dirname(srvScript),
           detached: true,
           stdio: 'ignore',
         });
@@ -345,7 +367,13 @@ function spawnPerceptionServiceIfNeeded(): void {
     });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  const isVerifyMode = process.argv.includes('--verify-packaged') || process.env.VERIFY_PACKAGED === '1';
+  if (isVerifyMode) {
+    await runPackagedVerification();
+    return;
+  }
+
   spawnPerceptionServiceIfNeeded();
   agentHost = new AgentHost();
   createMainWindow();

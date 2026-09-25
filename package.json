@@ -9,7 +9,7 @@
     "dev:perception": "powershell -Command \"cd backend/perception-service; .venv/Scripts/uvicorn server:app --port 4200\"",
     "dev:all": "concurrently -k -n \"FE,AGENT,PERCEPT\" -c \"cyan,blue,magenta\" \"npm run dev:frontend\" \"npm run dev:agent\" \"npm run dev:perception\"",
     "build:frontend": "npm run build --prefix frontend",
-    "build:electron": "tsc -p tsconfig.electron.json",
+    "build:electron": "tsc -p tsconfig.electron.json && node -e \"const fs=require('fs'); fs.writeFileSync('dist-electron/main.js', 'require(\\\"./electron/main.js\\\");'); fs.writeFileSync('dist-electron/index.js', 'require(\\\"./electron/main.js\\\");');\"",
     "dev:desktop": "concurrently -k -n \"FE,ELECTRON\" -c \"cyan,green\" \"npm run dev:frontend\" \"wait-on tcp:5173 && npm run build:electron && electron .\"",
     "start:desktop": "electron .",
     "build:agent": "npm run build --prefix backend/agent-service",
@@ -42,6 +42,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "dotenv": "^18.0.3",
     "lucide-react": "^1.45.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
