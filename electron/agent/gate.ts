@@ -196,7 +196,7 @@ export class SafetyGate {
         const normalized = path.normalize(execPath).toLowerCase();
         const base = path.basename(execPath).toLowerCase();
         const isUnderAllowedRoot = this.allowedProjectRoots.some(root => normalized.startsWith(root));
-        const isStandardDevTool = ['code', 'code.cmd', 'git', 'npm', 'node', 'python'].includes(base);
+        const isStandardDevTool = ['code', 'code.cmd', 'git', 'npm', 'node', 'python', 'whatsapp', 'whatsapp:'].includes(base) || base.startsWith('whatsapp') || execPath.toLowerCase().startsWith('whatsapp');
         if (!isUnderAllowedRoot && !execPath.endsWith('.exe') && !isStandardDevTool) {
           return {
             allowed: false,

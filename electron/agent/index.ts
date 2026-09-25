@@ -55,6 +55,7 @@ export class AgentHost {
   }
 
   private registerIpcHandlers(): void {
+    if (!ipcMain?.handle) return;
     // 1. Execute task
     ipcMain.handle('horizon:execute-task', async (_event, payload: { prompt: string; sessionId?: string; images?: string[] }) => {
       const sessionId = payload.sessionId || `sess-${Date.now()}`;

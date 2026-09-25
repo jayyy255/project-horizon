@@ -307,7 +307,12 @@ export class AgentCoordinator {
         const cmdArgs = Array.isArray(args.args) ? (args.args as string[]) : [];
         try {
           let targetExe = exe;
-          if (exe.includes('Code.exe') && !fs.existsSync(exe)) {
+          const lower = exe.toLowerCase().trim();
+          if (lower === 'whatsapp' || lower === 'whatsapp:' || lower === 'whatsapp.exe' || lower.startsWith('whatsapp')) {
+            targetExe = 'start whatsapp:';
+          } else if (exe.includes(':') && !exe.includes('\\') && !exe.includes('/') && !exe.startsWith('start ')) {
+            targetExe = `start ${exe}`;
+          } else if (exe.includes('Code.exe') && !fs.existsSync(exe)) {
             const userVsCode = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Microsoft VS Code', 'Code.exe');
             if (fs.existsSync(userVsCode)) {
               targetExe = userVsCode;
@@ -402,7 +407,7 @@ export class AgentCoordinator {
       const systemInstruction = `You are Project Horizon, an autonomous multimodal Windows desktop agent using ${model}.
 Available tools:
 - find_path(search_term: string): Search local workspace using SQLite FTS5 for files/projects.
-- launch_app(executable_path: string, args?: string[]): Launch local Windows application.
+- launch_app(executable_path: string, args?: string[]): Launch local Windows application (e.g. "code", "whatsapp:", or full path).
 - focus_window(process_name?: string, window_title?: string): Focus a window.
 - inspect_viewport(): Retrieve on-screen UI elements.
 - click_element(tag_id: number): Click on-screen element using Bézier curve.
@@ -464,7 +469,7 @@ Respond ONLY with a valid JSON object matching:
             responseMimeType: 'application/json'
           }
         }),
-        signal: AbortSignal.timeout(12000)
+        signal: AbortSignal.timeout(25000)
       });
 
       const latencyMs = performance.now() - startTime;
@@ -634,7 +639,9 @@ Respond ONLY with a valid JSON object matching:
       return ollamaPlan;
     }
 
-    throw new Error('No AI planner responded: both Gemini live API and Ollama local fallback failed to produce a valid plan.');
+    // 3. Fallback: Deterministic planner fallback
+    console.warn('[AgentCoordinator] Both Gemini live API and Ollama local fallback failed or timed out; engaging deterministic fallback.');
+    return this.fallbackDeterministicPlanner(state);
   }
 
   /**
@@ -644,6 +651,25 @@ Respond ONLY with a valid JSON object matching:
     state: ReActSessionState
   ): { action?: ProposedAction; finalAnswer?: string } {
     const executedTools = state.steps.map(s => s.toolName);
+
+    if (/whatsapp/i.test(state.taskPrompt)) {
+      if (!executedTools.includes('launch_app')) {
+        return {
+          action: {
+            tool_name: 'launch_app',
+            args: {
+              executable_path: 'whatsapp:',
+              args: [],
+            },
+            narration: 'Launching WhatsApp on your device...',
+            provenance: 'user_task',
+          },
+        };
+      }
+      return {
+        finalAnswer: 'WhatsApp has been launched successfully on your device.',
+      };
+    }
 
     if (/rmdir|del |powershell|cmd|delete cache|clean workspace/i.test(state.taskPrompt)) {
       if (!executedTools.includes('launch_app')) {

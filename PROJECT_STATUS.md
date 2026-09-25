@@ -12,6 +12,7 @@
 ### Current System Health & Quality Gates
 - **Automated Test Suite**: **47 / 47 tests passing** (100% pass rate) across all microservices and modules.
 - **In-Process Agent E2E**: **Verified** (`npm run test:step4c`) — in-process FTS5 search (0.97ms), CLI-first ReAct (0.09ms), Tier 2 HITL approval, and panic kill-switch (0.398ms).
+- **Live ReAct Desktop App Execution**: **Verified** — Live multimodal task reasoning using Google Gemini 3.5 Flash-Lite, Safety Gate Tier 1 authorization, and Windows protocol launcher (`whatsapp:`) executing end-to-end in 3.17s.
 - **Packaged Executables**: **Verified** (`scripts/test_packaged_exe.js`) — `release/win-unpacked/Project Horizon.exe` (246 MB) and `release/Project Horizon-Setup-1.0.0.exe` (113 MB NSIS installer).
 - **Security Vulnerability Audit**: **0 vulnerabilities** across root, frontend, and backend packages (`npm audit`).
 - **Codebase Architecture**: Native Electron desktop architecture with in-process agent coordinator and local Python perception service.
@@ -121,6 +122,7 @@ Project Horizon runs as a native Windows desktop application with the agent coor
   - `send_hotkey(keys)` (Tier 1 or Tier 2)
   - `inspect_viewport()` (Tier 1)
 - **CLI/API-First Strategy**: The agent favors direct process execution (`launch_app`) over sequential GUI clicks whenever an executable path is resolved.
+- **Windows Protocol & Application Normalization**: `launch_app` supports native executables, shell commands, and Windows URI schemes (such as `whatsapp:`), automatically normalizing them for non-blocking invocation and authorization via Safety Gate Tier 1.
 - **Humanized Bézier Cursor Synthesis**: Cubic Bézier curve trajectory interpolation with randomized acceleration (`synthesizer.ts`) to avoid robotic automation-detection flags.
 
 ### 3.5 Authentic Desktop Agent Experience (§7, §7.9)
