@@ -4,8 +4,9 @@ import path from 'path';
 import { SafetyGate, ProposedAction, GateEvaluationResult } from './gate';
 import { ProjectIndexer } from './indexer';
 import { InputSynthesizer } from './synthesizer';
-import { AuditDatabase } from './db';
 import { Tier2ActionPayload } from '../../shared/types';
+import { AuditDatabase } from './db';
+import { SystemKnowledgeGraph } from './graph';
 
 export interface ReActStep {
   stepIndex: number;
@@ -37,6 +38,7 @@ export class AgentCoordinator {
   private projectIndexer: ProjectIndexer;
   private inputSynthesizer: InputSynthesizer;
   private auditDb: AuditDatabase;
+  private systemGraph: SystemKnowledgeGraph;
   private onStateChange?: StateChangeCallback;
   private activeSession?: ReActSessionState;
   private activeFrameLookup: Map<number, {
@@ -59,7 +61,12 @@ export class AgentCoordinator {
     this.projectIndexer = projectIndexer;
     this.inputSynthesizer = inputSynthesizer;
     this.auditDb = auditDb;
+    this.systemGraph = new SystemKnowledgeGraph(path.join(process.cwd(), 'horizon_graph.db'));
     this.onStateChange = onStateChange;
+  }
+
+  public getSystemGraph(): SystemKnowledgeGraph {
+    return this.systemGraph;
   }
 
   public setFrameTags(tags: Array<{
@@ -307,23 +314,39 @@ export class AgentCoordinator {
         const cmdArgs = Array.isArray(args.args) ? (args.args as string[]) : [];
         try {
           let targetExe = exe;
-          const lower = exe.toLowerCase().trim();
-          if (lower === 'whatsapp' || lower === 'whatsapp:' || lower === 'whatsapp.exe' || lower.startsWith('whatsapp')) {
-            targetExe = 'start whatsapp:';
-          } else if (exe.includes(':') && !exe.includes('\\') && !exe.includes('/') && !exe.startsWith('start ')) {
-            targetExe = `start ${exe}`;
-          } else if (exe.includes('Code.exe') && !fs.existsSync(exe)) {
-            const userVsCode = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Microsoft VS Code', 'Code.exe');
-            if (fs.existsSync(userVsCode)) {
-              targetExe = userVsCode;
-            } else {
-              targetExe = 'code.cmd';
+          const resolved = this.systemGraph.resolveAppLaunchTarget(exe);
+          if (resolved) {
+            targetExe = resolved.target;
+          } else {
+            const lower = exe.toLowerCase().trim();
+            if (lower === 'whatsapp' || lower === 'whatsapp:' || lower === 'whatsapp.exe' || lower.startsWith('whatsapp')) {
+              targetExe = 'start whatsapp:';
+            } else if (lower === 'spotify' || lower === 'spotify:' || lower === 'spotify.exe' || lower.startsWith('spotify')) {
+              targetExe = 'start spotify:';
+            } else if (exe.includes(':') && !exe.includes('\\') && !exe.includes('/') && !exe.startsWith('start ')) {
+              targetExe = `start ${exe}`;
+            } else if (exe.includes('Code.exe') && !fs.existsSync(exe)) {
+              const userVsCode = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Microsoft VS Code', 'Code.exe');
+              if (fs.existsSync(userVsCode)) {
+                targetExe = `"${userVsCode}"`;
+              } else {
+                targetExe = 'code.cmd';
+              }
             }
           }
+
+          const cleanEnv = { ...process.env };
+          for (const k of Object.keys(cleanEnv)) {
+            if (k.startsWith('ELECTRON_') || (k.startsWith('VSCODE_') && k !== 'VSCODE_GIT_ASKPASS_NODE')) {
+              delete cleanEnv[k];
+            }
+          }
+
           const child = spawn(targetExe, cmdArgs, {
             detached: true,
             stdio: 'ignore',
             shell: true,
+            env: cleanEnv,
           });
           child.unref();
           return {
@@ -339,6 +362,11 @@ export class AgentCoordinator {
             error: err.message,
           };
         }
+      }
+      case 'check_open_workspace': {
+        const app = String(args.app_name || 'vscode');
+        const ws = this.systemGraph.getOpenWorkspace(app);
+        return ws ? { status: 'found', ...ws } : { status: 'none_open' };
       }
       case 'focus_window': {
         return { focused: true, target: args.process_name || args.window_title };
@@ -407,7 +435,8 @@ export class AgentCoordinator {
       const systemInstruction = `You are Project Horizon, an autonomous multimodal Windows desktop agent using ${model}.
 Available tools:
 - find_path(search_term: string): Search local workspace using SQLite FTS5 for files/projects.
-- launch_app(executable_path: string, args?: string[]): Launch local Windows application (e.g. "code", "whatsapp:", or full path).
+- launch_app(executable_path: string, args?: string[]): Launch local Windows application (e.g. "code", "whatsapp:", "spotify:", or full path).
+- check_open_workspace(app_name?: string): Check what folder or workspace is currently open in an application (e.g. "vscode").
 - focus_window(process_name?: string, window_title?: string): Focus a window.
 - inspect_viewport(): Retrieve on-screen UI elements.
 - click_element(tag_id: number): Click on-screen element using Bézier curve.
@@ -668,6 +697,34 @@ Respond ONLY with a valid JSON object matching:
       }
       return {
         finalAnswer: 'WhatsApp has been launched successfully on your device.',
+      };
+    }
+
+    if (/spotify/i.test(state.taskPrompt)) {
+      if (!executedTools.includes('launch_app')) {
+        return {
+          action: {
+            tool_name: 'launch_app',
+            args: {
+              executable_path: 'spotify:',
+              args: [],
+            },
+            narration: 'Launching Spotify on your device...',
+            provenance: 'user_task',
+          },
+        };
+      }
+      return {
+        finalAnswer: 'Spotify has been launched successfully on your device.',
+      };
+    }
+
+    if (/check.*(?:folder|workspace)|what.*(?:folder|workspace)|which.*(?:folder|workspace)|open.*folder/i.test(state.taskPrompt)) {
+      const ws = this.systemGraph.getOpenWorkspace('vscode');
+      return {
+        finalAnswer: ws
+          ? `The folder currently open in VS Code is "${ws.folderName}" at "${ws.folderPath}" (detected via ${ws.source}).`
+          : 'No active workspace was detected in VS Code.',
       };
     }
 

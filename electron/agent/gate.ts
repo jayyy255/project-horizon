@@ -86,6 +86,7 @@ export class SafetyGate {
       case 'inspect_viewport':
       case 'find_path':
       case 'focus_window':
+      case 'check_open_workspace':
         return {
           allowed: true,
           tier: 1,
@@ -196,7 +197,9 @@ export class SafetyGate {
         const normalized = path.normalize(execPath).toLowerCase();
         const base = path.basename(execPath).toLowerCase();
         const isUnderAllowedRoot = this.allowedProjectRoots.some(root => normalized.startsWith(root));
-        const isStandardDevTool = ['code', 'code.cmd', 'git', 'npm', 'node', 'python', 'whatsapp', 'whatsapp:'].includes(base) || base.startsWith('whatsapp') || execPath.toLowerCase().startsWith('whatsapp');
+        const isStandardDevTool = ['code', 'code.cmd', 'git', 'npm', 'node', 'python', 'whatsapp', 'whatsapp:', 'spotify', 'spotify:', 'vscode'].includes(base) ||
+          base.startsWith('whatsapp') || base.startsWith('spotify') ||
+          execPath.toLowerCase().startsWith('whatsapp') || execPath.toLowerCase().startsWith('spotify');
         if (!isUnderAllowedRoot && !execPath.endsWith('.exe') && !isStandardDevTool) {
           return {
             allowed: false,
