@@ -322,16 +322,16 @@ export class AgentCoordinator {
             if (lower === 'whatsapp' || lower === 'whatsapp:' || lower === 'whatsapp.exe' || lower.startsWith('whatsapp')) {
               targetExe = 'start whatsapp:';
             } else if (lower === 'spotify' || lower === 'spotify:' || lower === 'spotify.exe' || lower.startsWith('spotify')) {
-              targetExe = 'start spotify:';
-            } else if (exe.includes(':') && !exe.includes('\\') && !exe.includes('/') && !exe.startsWith('start ')) {
-              targetExe = `start ${exe}`;
-            } else if (exe.includes('Code.exe') && !fs.existsSync(exe)) {
+              targetExe = 'start explorer.exe shell:AppsFolder\\SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify';
+            } else if (lower.includes('code') || lower.includes('vscode')) {
               const userVsCode = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Microsoft VS Code', 'Code.exe');
               if (fs.existsSync(userVsCode)) {
-                targetExe = `"${userVsCode}"`;
+                targetExe = `start "" "${userVsCode}"`;
               } else {
-                targetExe = 'code.cmd';
+                targetExe = 'start "" code';
               }
+            } else if (exe.includes(':') && !exe.includes('\\') && !exe.includes('/') && !exe.startsWith('start ')) {
+              targetExe = `start ${exe}`;
             }
           }
 
@@ -706,10 +706,10 @@ Respond ONLY with a valid JSON object matching:
           action: {
             tool_name: 'launch_app',
             args: {
-              executable_path: 'spotify:',
+              executable_path: 'start explorer.exe shell:AppsFolder\\SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify',
               args: [],
             },
-            narration: 'Launching Spotify on your device...',
+            narration: 'Launching Spotify via Windows Application Activation Manager...',
             provenance: 'user_task',
           },
         };

@@ -314,7 +314,7 @@ export class SystemKnowledgeGraph {
 
     if (q.includes('spotify')) {
       return {
-        target: 'start spotify:',
+        target: 'start explorer.exe shell:AppsFolder\\SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify',
         args: [],
         name: 'Spotify',
       };
@@ -332,7 +332,7 @@ export class SystemKnowledgeGraph {
       const localAppData = process.env.LOCALAPPDATA || 'C:/Users/Jay/AppData/Local';
       const userVsCode = path.join(localAppData, 'Programs', 'Microsoft VS Code', 'Code.exe');
       return {
-        target: fs.existsSync(userVsCode) ? `"${userVsCode}"` : 'code',
+        target: fs.existsSync(userVsCode) ? `start "" "${userVsCode}"` : 'start "" code',
         args: [],
         name: 'Visual Studio Code',
       };
