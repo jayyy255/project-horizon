@@ -113,4 +113,5 @@ export class AgentHost {
 
 export { ReflexiveMatcher } from './reflexive';
 export { ModelRouter, ModelCircuitBreaker } from './router';
+export { CommandCache } from './cache';
 

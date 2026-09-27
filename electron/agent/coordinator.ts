@@ -10,6 +10,7 @@ import { SystemKnowledgeGraph } from './graph';
 import { ActionVerifier } from './verifier';
 import { ReflexiveMatcher } from './reflexive';
 import { ModelRouter, ModelCircuitBreaker } from './router';
+import { CommandCache } from './cache';
 
 export interface ReActStep {
   stepIndex: number;
@@ -54,6 +55,7 @@ export class AgentCoordinator {
   private cursorPosition: { x: number; y: number } = { x: 100, y: 100 };
   private reflexiveMatcher: ReflexiveMatcher = new ReflexiveMatcher();
   private modelRouter: ModelRouter = new ModelRouter();
+  private commandCache: CommandCache;
 
   constructor(
     safetyGate: SafetyGate,
@@ -67,6 +69,7 @@ export class AgentCoordinator {
     this.inputSynthesizer = inputSynthesizer;
     this.auditDb = auditDb;
     this.systemGraph = new SystemKnowledgeGraph(path.join(process.cwd(), 'horizon_graph.db'));
+    this.commandCache = new CommandCache(path.join(process.cwd(), 'horizon_cache.db'), undefined, this.projectIndexer);
     this.onStateChange = onStateChange;
   }
 
@@ -76,6 +79,10 @@ export class AgentCoordinator {
 
   public getModelRouter(): ModelRouter {
     return this.modelRouter;
+  }
+
+  public getCommandCache(): CommandCache {
+    return this.commandCache;
   }
 
   public getSystemGraph(): SystemKnowledgeGraph {
@@ -192,10 +199,17 @@ export class AgentCoordinator {
           console.log(`[Reflexive Matcher] Intercepted unambiguous intent in ${reflexiveLatencyMs.toFixed(2)}ms: ${reflexiveAction.tool_name}`);
           plan = { action: reflexiveAction };
         } else {
-          plan = await this.defaultCLIFirstPlanner(this.activeSession);
+          // Check Phase C CommandCache before invoking LLM planner
+          const cachedAction = this.commandCache.lookup('default_user', this.activeSession.taskPrompt);
+          if (cachedAction) {
+            console.log(`[Command Cache] Cache hit for "${this.activeSession.taskPrompt}": ${cachedAction.tool_name}`);
+            plan = { action: cachedAction };
+          } else {
+            plan = await this.defaultCLIFirstPlanner(this.activeSession);
+          }
         }
-      } else if (this.activeSession.steps.length > 0 && this.activeSession.steps[0].narration.startsWith('[Reflexive]')) {
-        plan = { finalAnswer: `Reflexive action completed: ${this.activeSession.steps[0].narration}` };
+      } else if (this.activeSession.steps.length > 0 && (this.activeSession.steps[0].narration.startsWith('[Reflexive]') || this.activeSession.steps[0].narration.startsWith('[Command Cache]'))) {
+        plan = { finalAnswer: `Action completed: ${this.activeSession.steps[0].narration}` };
       } else {
         plan = await this.defaultCLIFirstPlanner(this.activeSession);
       }
@@ -296,6 +310,7 @@ export class AgentCoordinator {
 
       if (!isVerified || execResult?.status === 'failed') {
         step.status = 'failed';
+        this.commandCache.recordFailure('default_user', this.activeSession.taskPrompt);
         this.activeSession.status = 'error';
         this.activeSession.currentNarration = `Action Verification Failed: ${execResult?.error || execResult?.details || 'Verification check failed.'}`;
         this.auditDb.logToolTrace({
@@ -315,6 +330,7 @@ export class AgentCoordinator {
       }
 
       step.status = 'succeeded';
+      this.commandCache.recordVerifiedSuccess('default_user', this.activeSession.taskPrompt, action);
       this.auditDb.logToolTrace({
         sessionId,
         stepIndex,
@@ -396,6 +412,7 @@ export class AgentCoordinator {
 
       if (!isVerified || execResult?.status === 'failed') {
         currentStep.status = 'failed';
+        this.commandCache.recordFailure('default_user', this.activeSession.taskPrompt);
         this.activeSession.status = 'error';
         this.activeSession.currentNarration = `Action Verification Failed: ${execResult?.error || execResult?.details || 'Verification check failed.'}`;
         this.auditDb.logToolTrace({
@@ -415,6 +432,12 @@ export class AgentCoordinator {
       }
 
       currentStep.status = 'succeeded';
+      this.commandCache.recordVerifiedSuccess('default_user', this.activeSession.taskPrompt, {
+        tool_name: currentStep.toolName,
+        args: currentStep.args,
+        narration: currentStep.narration,
+        provenance: 'user_task',
+      });
       this.auditDb.logToolTrace({
         sessionId: this.activeSession.sessionId,
         stepIndex: currentStep.stepIndex,
