@@ -197,10 +197,12 @@ export class SafetyGate {
         const normalized = path.normalize(execPath).toLowerCase();
         const base = path.basename(execPath).toLowerCase();
         const isUnderAllowedRoot = this.allowedProjectRoots.some(root => normalized.startsWith(root));
-        const isStandardDevTool = ['code', 'code.cmd', 'git', 'npm', 'node', 'python', 'whatsapp', 'whatsapp:', 'spotify', 'spotify:', 'vscode'].includes(base) ||
+        const isStandardDevTool = ['code', 'code.cmd', 'git', 'npm', 'node', 'python', 'whatsapp', 'whatsapp:', 'spotify', 'spotify:', 'vscode', 'notepad', 'notepad.exe', 'calculator', 'calc', 'calc.exe', 'cmd', 'cmd.exe', 'powershell', 'powershell.exe', 'wt', 'wt.exe', 'terminal'].includes(base) ||
           base.startsWith('whatsapp') || base.startsWith('spotify') ||
-          execPath.toLowerCase().startsWith('whatsapp') || execPath.toLowerCase().startsWith('spotify');
-        if (!isUnderAllowedRoot && !execPath.endsWith('.exe') && !isStandardDevTool) {
+          execPath.toLowerCase().startsWith('whatsapp') || execPath.toLowerCase().startsWith('spotify') ||
+          execPath.toLowerCase().startsWith('shell:appsfolder') || execPath.toLowerCase().startsWith('shell:') ||
+          execPath.toLowerCase().startsWith('https://') || execPath.toLowerCase().startsWith('http://');
+        if (!isUnderAllowedRoot && !execPath.endsWith('.exe') && !isStandardDevTool && !execPath.includes('!')) {
           return {
             allowed: false,
             tier: 1,
@@ -213,14 +215,19 @@ export class SafetyGate {
         const isDestructive = this.destructiveCommands.some(rgx => rgx.test(combined));
         const isShellTarget = /cmd(\.exe)?|powershell(\.exe)?|bash|sh/i.test(path.basename(execPath));
 
+        const sanitized: Record<string, unknown> = {
+          executable_path: execPath,
+          args: argVector,
+        };
+        if (args.expected_process) sanitized.expected_process = args.expected_process;
+        if (args.expected_title) sanitized.expected_title = args.expected_title;
+        if (args.visual_delta) sanitized.visual_delta = args.visual_delta;
+
         if (isDestructive || isShellTarget) {
           return {
             allowed: true,
             tier: 2,
-            sanitizedArgs: {
-              executable_path: execPath,
-              args: argVector,
-            },
+            sanitizedArgs: sanitized,
             tier2Payload: {
               actionId: `act-${Date.now()}`,
               description: `Authorize privileged execution of: ${path.basename(execPath)}`,
@@ -236,10 +243,7 @@ export class SafetyGate {
         return {
           allowed: true,
           tier: 1,
-          sanitizedArgs: {
-            executable_path: execPath,
-            args: argVector,
-          },
+          sanitizedArgs: sanitized,
         };
       }
 

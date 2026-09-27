@@ -1,6 +1,15 @@
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 import { createRequire } from 'module';
+
+export interface InstalledAppRecord {
+  appId: string;
+  name: string;
+  exePath?: string;
+  isStoreApp: boolean;
+  rawAppId: string;
+}
 
 export interface IndexedRecord {
   id?: number;
@@ -34,6 +43,7 @@ function resolveSqlite() {
 export class ProjectIndexer {
   private db: any = null;
   private inMemoryIndex: Array<{ name: string; path: string; manifest_type: string; content: string }> = [];
+  private inMemoryApps: Map<string, InstalledAppRecord> = new Map();
 
   constructor(dbPath: string = ':memory:') {
     const Sqlite = resolveSqlite();
@@ -50,6 +60,8 @@ export class ProjectIndexer {
         this.db = null;
       }
     }
+    // Index installed StartApps on initialization
+    this.indexInstalledApps();
   }
 
   private initialize(): void {
@@ -65,7 +77,126 @@ export class ProjectIndexer {
         content,
         tokenize = 'porter unicode61'
       );
+
+      CREATE TABLE IF NOT EXISTS installed_apps (
+        app_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        lower_name TEXT NOT NULL,
+        exe_path TEXT,
+        is_store_app INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_installed_apps_lower ON installed_apps(lower_name);
     `);
+  }
+
+  public indexInstalledApps(): InstalledAppRecord[] {
+    try {
+      const raw = execSync('powershell -NoProfile -Command "Get-StartApps | ConvertTo-Json -Compress"', {
+        encoding: 'utf8',
+        maxBuffer: 25 * 1024 * 1024,
+        timeout: 8000,
+      });
+      const apps = JSON.parse(raw.trim() || '[]');
+      if (Array.isArray(apps)) {
+        const records: InstalledAppRecord[] = [];
+        const now = Date.now();
+        const insertStmt = this.db ? this.db.prepare(`
+          INSERT INTO installed_apps (app_id, name, lower_name, exe_path, is_store_app, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT(app_id) DO UPDATE SET
+            name = excluded.name,
+            lower_name = excluded.lower_name,
+            exe_path = excluded.exe_path,
+            is_store_app = excluded.is_store_app,
+            updated_at = excluded.updated_at
+        `) : null;
+
+        for (const app of apps) {
+          const name = String(app.Name || '').trim();
+          const rawId = String(app.AppID || '').trim();
+          if (!name || !rawId) continue;
+
+          let exePath: string | undefined;
+          let isStoreApp = false;
+
+          if (fs.existsSync(rawId)) {
+            exePath = rawId;
+            isStoreApp = false;
+          } else if (rawId.toLowerCase().endsWith('.exe') && fs.existsSync(rawId)) {
+            exePath = rawId;
+            isStoreApp = false;
+          } else if (name.toLowerCase() === 'visual studio code' || name.toLowerCase() === 'code') {
+            const userCode = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Microsoft VS Code', 'Code.exe');
+            if (fs.existsSync(userCode)) {
+              exePath = userCode;
+            }
+            isStoreApp = false;
+          } else {
+            isStoreApp = rawId.includes('!') || !rawId.includes('\\');
+          }
+
+          const record: InstalledAppRecord = {
+            appId: rawId,
+            name,
+            exePath,
+            isStoreApp,
+            rawAppId: rawId,
+          };
+
+          this.inMemoryApps.set(name.toLowerCase(), record);
+          this.inMemoryApps.set(rawId.toLowerCase(), record);
+          records.push(record);
+
+          if (insertStmt) {
+            insertStmt.run(rawId, name, name.toLowerCase(), exePath || null, isStoreApp ? 1 : 0, now);
+          }
+        }
+        return records;
+      }
+    } catch (err) {
+      console.warn('[ProjectIndexer] Get-StartApps indexing error:', err);
+    }
+    return Array.from(this.inMemoryApps.values());
+  }
+
+  public findInstalledApp(query: string): InstalledAppRecord | null {
+    const q = query.toLowerCase().trim();
+    if (!q) return null;
+
+    if (this.inMemoryApps.has(q)) {
+      return this.inMemoryApps.get(q)!;
+    }
+
+    if (this.db) {
+      try {
+        const row = this.db.prepare(`
+          SELECT * FROM installed_apps
+          WHERE lower_name = ? OR lower_name LIKE ? OR LOWER(app_id) LIKE ?
+          ORDER BY (CASE WHEN lower_name = ? THEN 0 WHEN lower_name LIKE ? THEN 1 ELSE 2 END)
+          LIMIT 1
+        `).get(q, `${q}%`, `%${q}%`, q, `${q}%`) as any;
+
+        if (row) {
+          return {
+            appId: row.app_id,
+            name: row.name,
+            exePath: row.exe_path || undefined,
+            isStoreApp: Boolean(row.is_store_app),
+            rawAppId: row.app_id,
+          };
+        }
+      } catch {}
+    }
+
+    for (const [key, app] of this.inMemoryApps.entries()) {
+      if (key === q || key.startsWith(q) || app.name.toLowerCase().includes(q)) {
+        return app;
+      }
+    }
+
+    return null;
   }
 
   public indexItem(item: {

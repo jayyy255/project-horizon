@@ -88,3 +88,6 @@ $RECYCLE.BIN/
 *.ntvs*
 *.njsproj
 *.sln
+*.png
+PROJECT_STATUS.md
+*.db

@@ -110,3 +110,7 @@ export class AgentHost {
     this.auditDb.close();
   }
 }
+
+export { ReflexiveMatcher } from './reflexive';
+export { ModelRouter, ModelCircuitBreaker } from './router';
+
