@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { createRequire } from 'module';
 
 export interface GraphNode {
@@ -170,8 +171,9 @@ export class SystemKnowledgeGraph {
    */
   public discoverSystemEntities(): void {
     const now = Date.now();
-    const localAppData = process.env.LOCALAPPDATA || 'C:/Users/Jay/AppData/Local';
-    const appData = process.env.APPDATA || 'C:/Users/Jay/AppData/Roaming';
+    const userHome = os.homedir();
+    const localAppData = process.env.LOCALAPPDATA || path.join(userHome, 'AppData', 'Local');
+    const appData = process.env.APPDATA || path.join(userHome, 'AppData', 'Roaming');
 
     // 1. WhatsApp
     this.upsertNode({
@@ -199,15 +201,21 @@ export class SystemKnowledgeGraph {
     });
 
     // 3. Visual Studio Code
-    const vscodeExe = path.join(localAppData, 'Programs', 'Microsoft VS Code', 'Code.exe');
+    const vscodeExeUser = path.join(localAppData, 'Programs', 'Microsoft VS Code', 'Code.exe');
+    const programFiles = process.env.PROGRAMFILES || 'C:\\Program Files';
+    const vscodeExeSys = path.join(programFiles, 'Microsoft VS Code', 'Code.exe');
+    const resolvedVsCode = fs.existsSync(vscodeExeUser)
+      ? vscodeExeUser
+      : (fs.existsSync(vscodeExeSys) ? vscodeExeSys : 'code');
+
     this.upsertNode({
       id: 'app:vscode',
       type: 'app',
       name: 'Visual Studio Code',
-      path: fs.existsSync(vscodeExe) ? vscodeExe : 'code',
+      path: resolvedVsCode,
       metadata: {
         command: 'code',
-        exePath: vscodeExe,
+        exePath: resolvedVsCode,
       },
       updatedAt: now,
     });
@@ -239,6 +247,24 @@ export class SystemKnowledgeGraph {
               relation: 'OPENS_WORKSPACE',
               metadata: { active: true },
             });
+
+            // Dynamically link parent directory to project
+            const parentDir = path.dirname(cleanPath);
+            if (fs.existsSync(parentDir)) {
+              const parentId = `dir:${path.basename(parentDir).toLowerCase()}`;
+              this.upsertNode({
+                id: parentId,
+                type: 'directory',
+                name: path.basename(parentDir),
+                path: parentDir,
+                updatedAt: now,
+              });
+              this.addEdge({
+                sourceId: parentId,
+                targetId: projectId,
+                relation: 'CONTAINS',
+              });
+            }
           }
         }
       }
@@ -246,22 +272,27 @@ export class SystemKnowledgeGraph {
       // Ignore config read failures
     }
 
-    // 5. Index Common Parent Directories
-    if (fs.existsSync('E:/code/projects')) {
-      this.upsertNode({
-        id: 'dir:code_projects',
-        type: 'directory',
-        name: 'Projects Root',
-        path: 'E:/code/projects',
-        metadata: { drive: 'E:' },
-        updatedAt: now,
-      });
+    // 5. Index Common Developer / Workspace Roots dynamically
+    const candidateRoots = [
+      process.cwd(),
+      path.join(userHome, 'Projects'),
+      path.join(userHome, 'source', 'repos'),
+      path.join(userHome, 'code'),
+      path.join(userHome, 'Documents'),
+    ];
 
-      this.addEdge({
-        sourceId: 'dir:code_projects',
-        targetId: 'project:project-horizon',
-        relation: 'CONTAINS',
-      });
+    for (const root of candidateRoots) {
+      if (fs.existsSync(root)) {
+        const dirId = `dir:${path.basename(root).toLowerCase().replace(/[^\w]/g, '_')}`;
+        this.upsertNode({
+          id: dirId,
+          type: 'directory',
+          name: path.basename(root) || root,
+          path: root,
+          metadata: { drive: path.parse(root).root },
+          updatedAt: now,
+        });
+      }
     }
   }
 
