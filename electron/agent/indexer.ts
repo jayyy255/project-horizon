@@ -165,9 +165,29 @@ export class ProjectIndexer {
     const q = query.toLowerCase().trim();
     if (!q) return null;
 
+    if (q === 'code' || q === 'vscode' || q === 'visual studio code') {
+      const codeCandidates = [
+        path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Microsoft VS Code', 'Code.exe'),
+        'C:/Program Files/Microsoft VS Code/Code.exe',
+        'C:/Users/Jay/AppData/Local/Programs/Microsoft VS Code/Code.exe',
+      ];
+      for (const c of codeCandidates) {
+        if (fs.existsSync(c)) {
+          return {
+            appId: 'Microsoft.VisualStudioCode',
+            name: 'Visual Studio Code',
+            exePath: c,
+            isStoreApp: false,
+            rawAppId: 'Microsoft.VisualStudioCode',
+          };
+        }
+      }
+    }
+
     if (this.inMemoryApps.has(q)) {
       return this.inMemoryApps.get(q)!;
     }
+
 
     if (this.db) {
       try {

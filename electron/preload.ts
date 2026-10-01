@@ -12,6 +12,7 @@ export interface DesktopCaptureData {
 
 contextBridge.exposeInMainWorld('horizonAPI', {
   captureDesktop: (targetWindowName?: string): Promise<DesktopCaptureData> => ipcRenderer.invoke('horizon:capture-desktop', targetWindowName),
+  openTargetApp: (title?: string) => ipcRenderer.invoke('horizon:open-target-app', title),
   getDesktopSources: () => ipcRenderer.invoke('horizon:get-desktop-sources'),
   onDesktopCaptured: (callback: (data: DesktopCaptureData) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, data: DesktopCaptureData) => callback(data);

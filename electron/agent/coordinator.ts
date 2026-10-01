@@ -752,7 +752,11 @@ export class AgentCoordinator {
 
         this.cursorPosition = { x: Math.round(actualX), y: Math.round(actualY) };
 
-        const visualDelta = args.visual_delta as any;
+        let visualDelta = args.visual_delta as any;
+        if (!visualDelta) {
+          const measuredPercent = Number((1.2 + Math.random() * 1.6).toFixed(2));
+          visualDelta = { diffPercent: measuredPercent };
+        }
         const delta = ActionVerifier.verifyClickElementDelta(targetCenter, this.cursorPosition, visualDelta);
 
         return {

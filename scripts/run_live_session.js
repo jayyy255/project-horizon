@@ -167,9 +167,9 @@ async function runSession() {
 
     // 1. Launch Real Packaged App with CDP
     const exePath = path.join(ROOT_DIR, 'release/win-unpacked/Project Horizon.exe');
-    log('SETUP', `Launching Packaged Application: ${exePath} with --remote-debugging-port=9222`);
+    log('SETUP', `Launching Packaged Application: ${exePath} with --remote-debugging-port=9333`);
     
-    electronProc = spawn(exePath, ['--remote-debugging-port=9222'], {
+    electronProc = spawn(exePath, ['--remote-debugging-port=9333', '--remote-allow-origins=*'], {
       detached: true,
       stdio: 'ignore'
     });
@@ -180,13 +180,13 @@ async function runSession() {
     for (let i = 0; i < 20; i++) {
       await sleep(1000);
       try {
-        const res = await fetch('http://127.0.0.1:9222/json/list');
+        const res = await fetch('http://127.0.0.1:9333/json/list', { signal: AbortSignal.timeout(1500) });
         targets = await res.json();
         if (targets && targets.length > 0) break;
       } catch {}
     }
 
-    if (!targets) throw new Error('Could not connect to Electron CDP on port 9222');
+    if (!targets) throw new Error('Could not connect to Electron CDP on port 9333');
     log('SETUP', `CDP Targets enumerated (${targets.length} pages found):`);
     targets.forEach(t => log('SETUP', `  - [${t.type}] ${t.title} -> ${t.url}`));
 
@@ -216,20 +216,18 @@ async function runSession() {
     log('STEP_1', `[Model Weights Confirmation] YOLOv8 ONNX weight file: ${yoloWeightPath} (${(yoloWeightStat.size / (1024*1024)).toFixed(2)} MB)`);
     log('STEP_1', `[Model Loading Code Path] detector.py: UIElementDetector loads ${yoloWeightPath} into ONNXRuntime InferenceSession with RapidOCR() text engine.`);
 
-    // 1.2 Open a real Windows application with rich UI (Windows Settings)
-    log('STEP_1', 'Opening a real Windows UI window (Windows Settings: ms-settings:)...');
-    try {
-      execSync('powershell -Command "Start-Process ms-settings:"');
-    } catch {}
-    await sleep(2500);
+    // 1.2 Open a real Windows application with rich UI (Calculator)
+    log('STEP_1', 'Opening target application window (Calculator)...');
+    await cdp.evaluate(`window.horizonAPI.openTargetApp("Calculator")`);
+    await sleep(2000);
 
     // 1.3 Trigger real screen capture via native desktopCapturer API
-    log('STEP_1', 'Triggering real native desktop capture targeting Settings window...');
+    log('STEP_1', 'Triggering real native desktop capture targeting Calculator window...');
     const tCap0 = performance.now();
-    let captureResult = await cdp.evaluate(`window.horizonAPI.captureDesktop("Settings")`);
+    let captureResult = await cdp.evaluate(`window.horizonAPI.captureDesktop("Calculator")`);
     if (!captureResult?.dataUrl || captureResult.dataUrl.length < 100) {
-      log('STEP_1', 'Target window capture unavailable; capturing full desktop with Horizon window excluded...');
-      captureResult = await cdp.evaluate(`window.horizonAPI.captureDesktop()`);
+      log('STEP_1', 'Target window capture retry; querying desktop sources...');
+      captureResult = await cdp.evaluate(`window.horizonAPI.captureDesktop("Calculator")`);
     }
     if (!captureResult?.dataUrl || captureResult.dataUrl.length < 100) {
       throw new Error('Desktop capture returned empty or invalid dataUrl');
