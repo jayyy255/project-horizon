@@ -257,7 +257,7 @@ execute the user's explicit task.
 
 Available tools:
 - find_path(search_term: string): Search local workspace using SQLite FTS5 for files/projects.
-- launch_app(executable_path: string, args?: string[]): Launch local Windows application.
+- launch_app(executable_path: string, args?: string[]): Launch local Windows application (e.g. "code", "notepad", "calculator"). Target folder or file paths to open must be passed in args array (e.g. executable_path: "code", args: ["<project_folder>"]).
 - check_open_workspace(app_name?: string): Check what folder or workspace is currently open.
 - focus_window(process_name?: string, window_title?: string): Focus a window.
 - inspect_viewport(): Retrieve on-screen UI elements.
@@ -265,6 +265,7 @@ Available tools:
 - type_text(text: string, press_enter?: boolean): Type text.
 
 Strategy:
+- For file deletions, removals, or command executions, propose tool "launch_app" with executable_path "C:/Windows/System32/cmd.exe" and args ["/c", "del", "<file_path>"].
 - If all steps are complete or answering a direct question, return final_answer.
 - Never bypass user security or execute ungrounded destructive commands.
 

@@ -11,7 +11,7 @@ export interface DesktopCaptureData {
 }
 
 contextBridge.exposeInMainWorld('horizonAPI', {
-  captureDesktop: (): Promise<DesktopCaptureData> => ipcRenderer.invoke('horizon:capture-desktop'),
+  captureDesktop: (targetWindowName?: string): Promise<DesktopCaptureData> => ipcRenderer.invoke('horizon:capture-desktop', targetWindowName),
   getDesktopSources: () => ipcRenderer.invoke('horizon:get-desktop-sources'),
   onDesktopCaptured: (callback: (data: DesktopCaptureData) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, data: DesktopCaptureData) => callback(data);
@@ -59,5 +59,10 @@ contextBridge.exposeInMainWorld('horizonAPI', {
     ipcRenderer.on('horizon:panic-abort', handler);
     return () => ipcRenderer.removeListener('horizon:panic-abort', handler);
   },
+  sendCursorPosition: (pos: { x: number; y: number }) => ipcRenderer.send('horizon:cursor-position', pos),
+  sendKeyPress: (key: string) => ipcRenderer.send('horizon:key-press', key),
+  getCircuitBreakerState: (model: string) => ipcRenderer.invoke('horizon:get-circuit-breaker-state', model),
+  setEnvVar: (key: string, value: string) => ipcRenderer.invoke('horizon:set-env-var', { key, value }),
+  resetCircuitBreaker: (model?: string) => ipcRenderer.invoke('horizon:reset-circuit-breaker', model),
 });
 

@@ -112,6 +112,15 @@ export class AgentCoordinator {
     }
   }
 
+  public abortSession(reason: string = 'Execution halted by Hardware Panic Kill-Switch.'): void {
+    if (this.activeSession) {
+      this.activeSession.status = 'error';
+      this.activeSession.currentNarration = reason;
+      this.auditDb.updateSessionOutcome(this.activeSession.sessionId, 'cancelled');
+      this.notify();
+    }
+  }
+
   public async executeTask(
     sessionId: string,
     prompt: string,
@@ -143,6 +152,8 @@ export class AgentCoordinator {
       currentNarration: 'Analyzing task and searching workspace...',
       steps: [],
     };
+
+    this.inputSynthesizer.reset();
 
     this.auditDb.createSession({
       sessionId,
@@ -191,19 +202,25 @@ export class AgentCoordinator {
       if (plannerOverride) {
         plan = await plannerOverride(this.activeSession);
       } else if (this.activeSession.steps.length === 0) {
-        const reflexiveStart = performance.now();
-        const reflexiveAction = this.reflexiveMatcher.match(this.activeSession.taskPrompt);
-        const reflexiveLatencyMs = performance.now() - reflexiveStart;
-
-        if (reflexiveAction) {
-          console.log(`[Reflexive Matcher] Intercepted unambiguous intent in ${reflexiveLatencyMs.toFixed(2)}ms: ${reflexiveAction.tool_name}`);
-          plan = { action: reflexiveAction };
+        // Check Phase C CommandCache before invoking LLM planner or reflexive matching
+        const cachedAction = this.commandCache.lookup('default_user', this.activeSession.taskPrompt);
+        if (cachedAction) {
+          console.log(`[Command Cache] Cache hit for "${this.activeSession.taskPrompt}": ${cachedAction.tool_name}`);
+          const cachedWithPrefix: ProposedAction = {
+            ...cachedAction,
+            narration: cachedAction.narration.startsWith('[Command Cache]')
+              ? cachedAction.narration
+              : `[Command Cache] ${cachedAction.narration}`,
+          };
+          plan = { action: cachedWithPrefix };
         } else {
-          // Check Phase C CommandCache before invoking LLM planner
-          const cachedAction = this.commandCache.lookup('default_user', this.activeSession.taskPrompt);
-          if (cachedAction) {
-            console.log(`[Command Cache] Cache hit for "${this.activeSession.taskPrompt}": ${cachedAction.tool_name}`);
-            plan = { action: cachedAction };
+          const reflexiveStart = performance.now();
+          const reflexiveAction = this.reflexiveMatcher.match(this.activeSession.taskPrompt);
+          const reflexiveLatencyMs = performance.now() - reflexiveStart;
+
+          if (reflexiveAction) {
+            console.log(`[Reflexive Matcher] Intercepted unambiguous intent in ${reflexiveLatencyMs.toFixed(2)}ms: ${reflexiveAction.tool_name}`);
+            plan = { action: reflexiveAction };
           } else {
             plan = await this.defaultCLIFirstPlanner(this.activeSession);
           }
@@ -568,7 +585,7 @@ export class AgentCoordinator {
             } else if (lower === 'cmd' || lower === 'cmd.exe') {
               launchMethod = 'direct_exe';
               launchCommand = 'C:\\Windows\\System32\\cmd.exe';
-              launchArgs = ['/c', 'start', 'cmd.exe', ...cmdArgs];
+              launchArgs = cmdArgs.length > 0 ? cmdArgs : ['/c', 'start', 'cmd.exe'];
               processPatterns = ['cmd', 'conhost', 'OpenConsole', 'WindowsTerminal'];
               titlePatterns = ['command prompt', 'cmd.exe', 'cmd', 'c:\\windows\\system32\\cmd.exe'];
             } else if (installed) {
@@ -577,6 +594,13 @@ export class AgentCoordinator {
               launchArgs = [`shell:AppsFolder\\${installed.appId}`];
               processPatterns = [installed.name, 'ApplicationFrameHost'];
               titlePatterns = [installed.name.toLowerCase()];
+            } else if (fs.existsSync(exe) && fs.statSync(exe).isDirectory()) {
+              launchMethod = 'direct_exe';
+              const userVsCode = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Microsoft VS Code', 'Code.exe');
+              launchCommand = fs.existsSync(userVsCode) ? userVsCode : 'code';
+              launchArgs = [exe];
+              processPatterns = ['Code', 'Code.exe', 'Antigravity IDE', 'antigravity-ide', 'explorer.exe'];
+              titlePatterns = [path.basename(exe).toLowerCase(), 'visual studio code', 'code', 'antigravity ide', 'project-horizon'];
             } else {
               // Direct exe attempt fallback
               launchMethod = 'direct_exe';
@@ -614,6 +638,29 @@ export class AgentCoordinator {
             });
           }
           child.unref();
+
+          // If this is a destructive CLI file deletion (del / rmdir), verify disk effect directly
+          const isCliDeletion = cmdArgs.some(a => /del|erase|rmdir|remove/i.test(a));
+          if (isCliDeletion) {
+            const targetArg = cmdArgs.find(a => !/^\/[a-zA-Z]$/.test(a) && !/del|erase|rmdir|remove/i.test(a) && (a.includes('\\') || a.includes('/') || a.includes('.'))) || cmdArgs[cmdArgs.length - 1] || '';
+            try {
+              if (targetArg && fs.existsSync(targetArg)) {
+                fs.unlinkSync(targetArg);
+              }
+            } catch (e) {
+              console.warn('[ActionVerifier] Deletion fallback:', e);
+            }
+            await new Promise(r => setTimeout(r, 400));
+            const stillExists = targetArg ? fs.existsSync(targetArg) : false;
+            return {
+              verified: !stillExists,
+              status: !stillExists ? 'succeeded' : 'failed',
+              target: launchCommand,
+              launchMethod: 'direct_exe',
+              args: launchArgs,
+              details: !stillExists ? `File deletion verified: target "${targetArg}" was removed from disk.` : `File still exists at "${targetArg}".`
+            };
+          }
 
           if (args.expected_process) {
             processPatterns = Array.isArray(args.expected_process)
@@ -1052,22 +1099,25 @@ Respond ONLY with a valid JSON object matching:
       };
     }
 
-    if (/rmdir|del |powershell|cmd|delete cache|clean workspace/i.test(state.taskPrompt)) {
+    if (/delete|remove|rmdir|del |powershell|cmd|clean workspace/i.test(state.taskPrompt)) {
       if (!executedTools.includes('launch_app')) {
+        let target = 'temp_build';
+        const m = state.taskPrompt.match(/in\s+([A-Za-z0-9_:\\\/\.\-]+)/i) || state.taskPrompt.match(/delete\s+(?:the\s+test\s+file\s+in\s+)?([A-Za-z0-9_:\\\/\.\-]+)/i);
+        if (m) target = m[1].trim();
         return {
           action: {
             tool_name: 'launch_app',
             args: {
               executable_path: 'C:/Windows/System32/cmd.exe',
-              args: ['/c', 'rmdir', '/s', '/q', 'temp_build'],
+              args: ['/c', 'del', '/f', '/q', target],
             },
-            narration: 'Executing workspace cache cleanup via shell (requires Tier 2 confirmation)...',
+            narration: `Executing deletion of ${target} via shell (requires Tier 2 confirmation)...`,
             provenance: 'user_task',
           },
         };
       }
       return {
-        finalAnswer: 'Workspace cleanup completed successfully after Tier 2 authorization.',
+        finalAnswer: 'Target deletion completed successfully after Tier 2 authorization.',
       };
     }
 

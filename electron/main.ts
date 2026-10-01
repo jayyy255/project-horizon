@@ -70,7 +70,7 @@ let lastCapturedData: {
  * Captures real desktop pixels using Electron's desktopCapturer API.
  * Pulls native resolution buffer directly from Windows DWM.
  */
-async function captureRealDesktop(): Promise<{
+async function captureRealDesktop(targetWindowName?: string): Promise<{
   dataUrl: string;
   width: number;
   height: number;
@@ -83,27 +83,64 @@ async function captureRealDesktop(): Promise<{
   const width = Math.round(primaryDisplay.bounds.width * scaleFactor);
   const height = Math.round(primaryDisplay.bounds.height * scaleFactor);
 
-  console.log(`[Project Horizon] Enumerating desktop display: ${primaryDisplay.id} (${width}x${height}px, scale: ${scaleFactor})`);
+  console.log(`[Project Horizon] Capturing target "${targetWindowName || 'entire screen'}" (display: ${width}x${height}px, scale: ${scaleFactor})`);
 
   let dataUrl = '';
   let sourceId = '';
   let displayLabel = 'Entire Screen';
 
+  // 1. Temporarily hide Horizon MainWindow if visible so it NEVER occludes the desktop or foreground apps
+  const wasVisible = mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible();
+  if (wasVisible) {
+    try {
+      mainWindow?.hide();
+      await new Promise(r => setTimeout(r, 120));
+    } catch {}
+  }
+
   try {
     const sources = await desktopCapturer.getSources({
-      types: ['screen'],
+      types: targetWindowName ? ['window', 'screen'] : ['screen', 'window'],
       thumbnailSize: { width, height },
       fetchWindowIcons: false,
     });
 
     if (sources && sources.length > 0) {
-      const source = sources[0];
-      sourceId = source.id;
-      displayLabel = source.name || 'Entire Screen';
-      dataUrl = source.thumbnail.toDataURL();
+      // Exclude Horizon's OWN windows to prevent perception from inspecting agent itself
+      const validSources = sources.filter((s) => {
+        const title = (s.name || '').toLowerCase();
+        return !title.includes('project horizon') &&
+               !title.includes('celestial') &&
+               !title.includes('electron');
+      });
+
+      let chosenSource: Electron.DesktopCapturerSource | undefined;
+      if (targetWindowName) {
+        const targetLower = targetWindowName.toLowerCase();
+        chosenSource = validSources.find(s => s.name.toLowerCase().includes(targetLower));
+      }
+
+      if (!chosenSource) {
+        chosenSource = sources.find((s) => s.id.startsWith('screen') && !s.thumbnail.isEmpty()) ||
+                       validSources.find((s) => !s.thumbnail.isEmpty()) ||
+                       validSources[0];
+      }
+
+      if (chosenSource && !chosenSource.thumbnail.isEmpty()) {
+        sourceId = chosenSource.id;
+        displayLabel = chosenSource.name || 'Entire Screen';
+        dataUrl = chosenSource.thumbnail.toDataURL();
+      }
     }
   } catch (err) {
     console.warn('[Project Horizon] desktopCapturer.getSources warning:', err);
+  } finally {
+    // Restore Horizon MainWindow without stealing focus
+    if (wasVisible && mainWindow && !mainWindow.isDestroyed()) {
+      try {
+        mainWindow.showInactive();
+      } catch {}
+    }
   }
 
   lastCapturedData = {
@@ -407,8 +444,8 @@ app.whenReady().then(async () => {
   });
 
   // Setup IPC Handlers
-  ipcMain.handle('horizon:capture-desktop', async () => {
-    return await captureRealDesktop();
+  ipcMain.handle('horizon:capture-desktop', async (_event, targetWindowName?: string) => {
+    return await captureRealDesktop(targetWindowName);
   });
 
   ipcMain.handle('horizon:get-desktop-sources', async () => {

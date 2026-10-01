@@ -28,6 +28,7 @@ export class AgentHost {
 
     this.inputSynthesizer = new InputSynthesizer({ width: 1920, height: 1080 }, (panicEvent) => {
       console.log('[AgentHost] Hardware Panic Kill-Switch Triggered:', panicEvent);
+      this.coordinator?.abortSession('Execution halted by Hardware Panic Kill-Switch.');
       this.mainWindow?.webContents.send('horizon:panic-abort', panicEvent);
     });
 
@@ -98,6 +99,23 @@ export class AgentHost {
 
     ipcMain.on('horizon:key-press', (_event, key: string) => {
       this.inputSynthesizer.handleKeyEvent(key);
+    });
+
+    // 7. Circuit breaker state
+    ipcMain.handle('horizon:get-circuit-breaker-state', (_event, model: string) => {
+      return this.coordinator.getModelRouter().getCircuitBreaker().getState(model);
+    });
+
+    // 8. Environment variable override (for live circuit breaker failure testing)
+    ipcMain.handle('horizon:set-env-var', (_event, payload: { key: string; value: string }) => {
+      process.env[payload.key] = payload.value;
+      return true;
+    });
+
+    // 9. Circuit breaker reset
+    ipcMain.handle('horizon:reset-circuit-breaker', (_event, model?: string) => {
+      this.coordinator.getModelRouter().getCircuitBreaker().reset(model);
+      return true;
     });
   }
 
