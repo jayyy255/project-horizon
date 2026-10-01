@@ -54,8 +54,22 @@ def parse_som(request: Base64ParseRequest):
     start_time = time.perf_counter()
 
     try:
-        raw_data = base64.b64decode(request.image_base64)
+        b64_str = request.image_base64
+        if not b64_str or len(b64_str.strip()) < 16:
+            raise ValueError(f"Received empty or truncated base64 string ({len(b64_str or '')} chars)")
+        if "," in b64_str:
+            b64_str = b64_str.split(",", 1)[1]
+        b64_str = b64_str.strip().replace("\n", "").replace("\r", "").replace(" ", "+")
+        raw_data = base64.b64decode(b64_str)
+        if len(raw_data) < 16:
+            raise ValueError(f"Decoded byte buffer is too short ({len(raw_data)} bytes). Expected valid image binary.")
+        # Check magic bytes for PNG (\x89PNG) or JPEG (\xff\xd8\xff) or BMP (BM)
+        if not (raw_data.startswith(b'\x89PNG') or raw_data.startswith(b'\xff\xd8\xff') or raw_data.startswith(b'BM')):
+            first_bytes = raw_data[:8].hex()
+            print(f"[parse_som] Warning: unrecognized image magic bytes: {first_bytes}")
         image = Image.open(io.BytesIO(raw_data))
+        if image.mode != "RGB":
+            image = image.convert("RGB")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid base64 image data: {str(e)}")
 
