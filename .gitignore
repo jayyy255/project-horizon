@@ -92,3 +92,6 @@ scripts/
 docs/
 PROJECT_STATUS.md
 *.db
+*.log
+packaged_verification_report.json
+phase0_real_som_tagged_screenshot.png
