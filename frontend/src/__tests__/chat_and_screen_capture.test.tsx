@@ -102,4 +102,30 @@ describe('Chat, Screen Capture, Multi-Attachments & Auto-Dismiss E2E Tests', () 
     // If not yet clicked outside, summon button is not there
     expect(summonBtn).toBeNull();
   });
+
+  it('displays past chats in sidebar and allows user to continue a conversation thread', () => {
+    render(<App />);
+
+    // Verify Past Chats sidebar renders
+    expect(screen.getByText('Past Chats')).toBeDefined();
+    expect(screen.getByText('New Chat')).toBeDefined();
+    expect(screen.getAllByText('Explain compile error in WebGL vertex shader').length).toBeGreaterThanOrEqual(1);
+
+    // Switch to second session
+    const session2Item = screen.getByText('Open target repo in VS Code and branch to feature/liquid');
+    fireEvent.click(session2Item);
+
+    // Verify session 2 messages loaded
+    expect(screen.getByText(/Successfully launched Visual Studio Code targeting workspace/i)).toBeDefined();
+
+    // Type a follow-up query to continue the conversation
+    const input = screen.getByPlaceholderText(/Ask Gemini/i);
+    fireEvent.change(input, { target: { value: 'Now create a pull request for feature/liquid' } });
+
+    const generateBtn = screen.getByText('Generate');
+    fireEvent.click(generateBtn);
+
+    // Verify follow-up message is appended in the conversation stream
+    expect(screen.getByText('Now create a pull request for feature/liquid')).toBeDefined();
+  });
 });

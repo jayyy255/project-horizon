@@ -60,6 +60,7 @@ export interface HorizonAPI {
   searchIndexer: (payload: { query: string; limit?: number }) => Promise<any[]>;
   onAgentStateUpdate: (callback: (state: any) => void) => () => void;
   onPanicAbort: (callback: (panicEvent: any) => void) => () => void;
+  approveHotkey?: (hotkey?: string) => Promise<{ success: boolean; hotkey?: string; error?: string }>;
 }
 
 declare global {

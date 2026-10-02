@@ -512,6 +512,26 @@ app.whenReady().then(async () => {
   });
 
   // Setup IPC Handlers
+  ipcMain.handle('horizon:approve-hotkey', (_event, customHotkey?: string) => {
+    const hotkeys = customHotkey ? [customHotkey] : ['CommandOrControl+Shift+C', 'Super+Shift+C'];
+    let registeredCount = 0;
+    for (const hk of hotkeys) {
+      try {
+        if (!globalShortcut.isRegistered(hk)) {
+          globalShortcut.register(hk, () => {
+            console.log(`[Project Horizon] Global Hotkey (${hk}) triggered screen capture`);
+            triggerRealCaptureAndShowOverlay();
+          });
+          registeredCount++;
+        }
+      } catch (err) {
+        console.warn(`[Project Horizon] Could not register ${hk}:`, err);
+      }
+    }
+    console.log(`[Project Horizon] Hotkey approval confirmed: ${registeredCount} registered`);
+    return { success: true, count: registeredCount };
+  });
+
   ipcMain.handle('horizon:capture-desktop', async (_event, targetWindowName?: string) => {
     return await captureRealDesktop(targetWindowName);
   });

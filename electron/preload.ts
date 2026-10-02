@@ -65,5 +65,6 @@ contextBridge.exposeInMainWorld('horizonAPI', {
   getCircuitBreakerState: (model: string) => ipcRenderer.invoke('horizon:get-circuit-breaker-state', model),
   setEnvVar: (key: string, value: string) => ipcRenderer.invoke('horizon:set-env-var', { key, value }),
   resetCircuitBreaker: (model?: string) => ipcRenderer.invoke('horizon:reset-circuit-breaker', model),
+  approveHotkey: (hotkey?: string) => ipcRenderer.invoke('horizon:approve-hotkey', hotkey),
 });
 
