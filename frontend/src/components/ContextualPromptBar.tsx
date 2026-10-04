@@ -19,6 +19,7 @@ interface ContextualPromptBarProps {
   onClearAttachments?: () => void;
   onTriggerLasso?: () => void;
   onTriggerFullScreen?: () => void;
+  hideSuggestions?: boolean;
 }
 
 export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({ 
@@ -28,7 +29,8 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
   onRemoveAttachment,
   onClearAttachments,
   onTriggerLasso,
-  onTriggerFullScreen
+  onTriggerFullScreen,
+  hideSuggestions = false
 }) => {
   const [promptText, setPromptText] = useState("");
   const [submittedMsg, setSubmittedMsg] = useState("");
@@ -226,27 +228,29 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
         </div>
 
         {/* Prompt Suggestions */}
-        <div className="flex items-center gap-2 mt-2 pt-2.5 border-t border-slate-200/80 dark:border-slate-800/80 overflow-x-auto pb-0.5">
-          <span className="text-[10px] uppercase font-bold tracking-wider text-[#0055A0] dark:text-[#8CC1E9] pl-1 flex-shrink-0">
-            Suggested:
-          </span>
-          {[
-            "open vs", 
-            "Explain this screen area", 
-            "query and prepare graph"
-          ].map((pill, idx) => (
-            <button
-              key={idx}
-              onClick={() => {
-                setPromptText(pill);
-                handleExecute(pill);
-              }}
-              className="px-3 py-1 rounded-full text-xs whitespace-nowrap bg-slate-100 hover:bg-[#8CC1E9]/20 text-slate-700 dark:bg-slate-800/70 dark:hover:bg-[#438BC4]/25 dark:text-slate-300 border border-slate-200 dark:border-slate-700/60 hover:border-[#8CC1E9] dark:hover:border-[#8CC1E9]/60 transition-all font-medium"
-            >
-              {pill}
-            </button>
-          ))}
-        </div>
+        {!hideSuggestions && (
+          <div className="flex items-center gap-2 mt-2 pt-2.5 border-t border-slate-200/80 dark:border-slate-800/80 overflow-x-auto pb-0.5">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-[#0055A0] dark:text-[#8CC1E9] pl-1 flex-shrink-0">
+              Suggested:
+            </span>
+            {[
+              "open vs", 
+              "Explain this screen area", 
+              "query and prepare graph"
+            ].map((pill, idx) => (
+              <button
+                key={idx}
+                onClick={() => {
+                  setPromptText(pill);
+                  handleExecute(pill);
+                }}
+                className="px-3 py-1 rounded-full text-xs whitespace-nowrap bg-slate-100 hover:bg-[#8CC1E9]/20 text-slate-700 dark:bg-slate-800/70 dark:hover:bg-[#438BC4]/25 dark:text-slate-300 border border-slate-200 dark:border-slate-700/60 hover:border-[#8CC1E9] dark:hover:border-[#8CC1E9]/60 transition-all font-medium"
+              >
+                {pill}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {submittedMsg && (

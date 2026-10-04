@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import App from '../App';
 
 describe('Project Horizon Frontend E2E User Journey & Safety Gating Flows', () => {
-  it('Flow 1: Interacts with the Contextual Prompt Bar in Desktop Cockpit and dispatches tasks', () => {
+  it('Flow 1: Interacts with the Contextual Prompt Bar in production workspace and dispatches tasks', () => {
     render(<App />);
 
     const input = screen.getByPlaceholderText('Ask Gemini to inspect, refactor, or automate...');
@@ -18,31 +18,36 @@ describe('Project Horizon Frontend E2E User Journey & Safety Gating Flows', () =
     expect(screen.getByText(/Dispatched task to Gemini 2.5/i)).toBeDefined();
   });
 
-  it('Flow 2: Interacts with the State Machine Controller tokens in Studio view', () => {
+  it('Flow 2: Interacts with the Chat History Sidebar and session switching in production workspace', () => {
     render(<App />);
 
-    // Switch to Component Studio
-    const studioBtn = screen.getByText('Component Studio');
-    fireEvent.click(studioBtn);
+    // Verify past chat sessions are listed in the sidebar
+    expect(screen.getAllByText('Explain compile error in WebGL vertex shader').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Open target repo in VS Code and branch to feature/liquid')).toBeDefined();
 
-    // Click "Risk (Ivory)" state token
-    const riskBtn = screen.getByText('Risk (Ivory)');
-    fireEvent.click(riskBtn);
+    // Click "New Chat" button
+    const newChatBtn = screen.getByText('New Chat');
+    fireEvent.click(newChatBtn);
 
-    expect(screen.getByText('INTERACTIVE_TEST')).toBeDefined();
+    // Switch to another past conversation by clicking on it
+    const pastChat = screen.getByText('Open target repo in VS Code and branch to feature/liquid');
+    fireEvent.click(pastChat);
 
-    // Switch back to "Idle Standby"
-    const idleBtn = screen.getByText('Idle Standby');
-    fireEvent.click(idleBtn);
-    expect(idleBtn).toBeDefined();
+    // Verify conversation transcript loads
+    expect(screen.getByText(/Visual Studio Code/i)).toBeDefined();
   });
 
-  it('Flow 3: E2E Tier 2 HITL Security Modal trigger and dismissal flows in Desktop Cockpit', () => {
+  it('Flow 3: E2E Tier 2 HITL Security Modal trigger and dismissal flows via programmatic event (no dev button)', () => {
     render(<App />);
 
-    // Trigger Tier 2 modal
-    const simulateBtn = screen.getByText('Simulate Tier 2 Interrupter');
-    fireEvent.click(simulateBtn);
+    // Pre-condition: modal is not open, and no dev button exists
+    expect(screen.queryByText(/Simulate Tier 2 Interrupter/i)).toBeNull();
+    expect(screen.queryByText('Review Destructive File Modification')).toBeNull();
+
+    // Trigger Tier 2 modal programmatically via test/IPC event
+    act(() => {
+      window.dispatchEvent(new CustomEvent('horizon:test-trigger-tier2'));
+    });
 
     // Verify modal elements are visible
     const modalHeaders = screen.getAllByText('Review Destructive File Modification');
@@ -56,10 +61,10 @@ describe('Project Horizon Frontend E2E User Journey & Safety Gating Flows', () =
     expect(screen.queryByText('Review Destructive File Modification')).toBeNull();
   });
 
-  it('Flow 4: First-Run Consent Modal acceptance lifecycle from Desktop Cockpit', () => {
+  it('Flow 4: First-Run Consent Modal acceptance lifecycle from production sidebar', () => {
     render(<App />);
 
-    // Open Privacy Agreement / Consent Modal from footer link
+    // Open Privacy Agreement / Consent Modal from production sidebar link
     const consentLink = screen.getByText('Privacy Agreement');
     fireEvent.click(consentLink);
 
@@ -81,10 +86,10 @@ describe('Project Horizon Frontend E2E User Journey & Safety Gating Flows', () =
     expect(screen.queryByText('Google Gemini Multimodal Authorization')).toBeNull();
   });
 
-  it('Flow 5: Settings and preferences suite tab switching and hotkey cycling', () => {
+  it('Flow 5: Settings and preferences suite tab switching and hotkey cycling from production sidebar', () => {
     render(<App />);
 
-    // Open Settings Suite from taskbar tray button
+    // Open Settings Suite from sidebar preferences button
     const settingsBtn = screen.getByTitle('Open Preferences & Controls');
     fireEvent.click(settingsBtn);
 

@@ -140,7 +140,7 @@ export const ReActTracePanel: React.FC<ReActTracePanelProps> = ({
 
                 {/* Parameters Display */}
                 <div className="flex flex-wrap gap-1.5 mt-2">
-                  {Object.entries(step.params).map(([k, v]) => (
+                  {Object.entries(step.params || {}).map(([k, v]) => (
                     <span key={k} className="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800">
                       <span className="text-[#0055A0] dark:text-[#8CC1E9] font-semibold">{k}:</span> {String(v)}
                     </span>

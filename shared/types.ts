@@ -61,6 +61,10 @@ export interface HorizonAPI {
   onAgentStateUpdate: (callback: (state: any) => void) => () => void;
   onPanicAbort: (callback: (panicEvent: any) => void) => () => void;
   approveHotkey?: (hotkey?: string) => Promise<{ success: boolean; hotkey?: string; error?: string }>;
+  openMainWindow?: () => Promise<void>;
+  hideFloatingBar?: () => Promise<void>;
+  toggleFloatingBar?: () => Promise<void>;
+  triggerCapture?: () => Promise<void>;
 }
 
 declare global {

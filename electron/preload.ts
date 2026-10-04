@@ -66,5 +66,9 @@ contextBridge.exposeInMainWorld('horizonAPI', {
   setEnvVar: (key: string, value: string) => ipcRenderer.invoke('horizon:set-env-var', { key, value }),
   resetCircuitBreaker: (model?: string) => ipcRenderer.invoke('horizon:reset-circuit-breaker', model),
   approveHotkey: (hotkey?: string) => ipcRenderer.invoke('horizon:approve-hotkey', hotkey),
+  openMainWindow: () => ipcRenderer.invoke('horizon:open-main-window'),
+  hideFloatingBar: () => ipcRenderer.invoke('horizon:hide-floating-bar'),
+  toggleFloatingBar: () => ipcRenderer.invoke('horizon:toggle-floating-bar'),
+  triggerCapture: () => ipcRenderer.invoke('horizon:trigger-capture'),
 });
 

@@ -1,31 +1,27 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, renderHook, act } from '@testing-library/react';
 import App from '../App';
+import { useHorizonAgent } from '../hooks/useHorizonAgent';
 
-describe('Project Horizon Frontend Suite', () => {
-  it('renders master header with Horizon title, desktop cockpit, and controls', () => {
+describe('Project Horizon Production App Suite', () => {
+  it('renders production header with Horizon title, celestial badge, and screen capture trigger (no dev chrome)', () => {
     render(<App />);
     expect(screen.getAllByText('Project Horizon').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Celestial & Cosmic Suite')).toBeDefined();
-    expect(screen.getByText('Desktop Agent Cockpit')).toBeDefined();
-    expect(screen.getByText('Component Studio')).toBeDefined();
+    expect(screen.getByText('Multimodal Windows Desktop Agent')).toBeDefined();
+    expect(screen.getByTitle('Screen Capture (Win+Shift+C)')).toBeDefined();
+
+    // Confirm dev buttons & badges are strictly NOT rendered
+    expect(screen.queryByText(/Backend: Connected/i)).toBeNull();
+    expect(screen.queryByText(/Simulate Tier 2 Interrupter/i)).toBeNull();
+    expect(screen.queryByText('Desktop Agent Cockpit')).toBeNull();
+    expect(screen.queryByText('Component Studio')).toBeNull();
   });
 
-  it('renders all 10 component cards from specification in Component Studio view', () => {
+  it('renders conversational two-column workspace with past chats sidebar and prompt bar', () => {
     render(<App />);
-    const studioBtn = screen.getByText('Component Studio');
-    fireEvent.click(studioBtn);
-
-    expect(screen.getByText('Capture Overlay Canvas')).toBeDefined();
-    expect(screen.getByText('Contextual Prompt Input Bar')).toBeDefined();
-    expect(screen.getByText('HUD Collapsed State Chip')).toBeDefined();
-    expect(screen.getByText('HUD Expanded ReAct Trace Panel')).toBeDefined();
-    expect(screen.getByText('Tier 2 Confirmation Modal (Safety Interrupter)')).toBeDefined();
-    expect(screen.getByText('System Tray Presence Popover')).toBeDefined();
-    expect(screen.getByText('First-Run Onboarding & Consent Modal')).toBeDefined();
-    expect(screen.getByText('Settings & Preferences Suite')).toBeDefined();
-    expect(screen.getByText('Session History & Follow-Up Drawer')).toBeDefined();
-    expect(screen.getByText('HUD State Machine Controller & Token Kit')).toBeDefined();
+    expect(screen.getByText('Past Chats')).toBeDefined();
+    expect(screen.getByPlaceholderText('Ask Gemini to inspect, refactor, or automate...')).toBeDefined();
   });
 
   it('toggles between dark and light modes', () => {
@@ -36,10 +32,24 @@ describe('Project Horizon Frontend Suite', () => {
     expect(themeButton.textContent).toContain('Dark Mode');
   });
 
-  it('allows simulating the Tier 2 security modal interrupter in Desktop Cockpit', () => {
+  it('triggers Tier 2 security modal programmatically without any visible UI button', () => {
     render(<App />);
-    const simulateButton = screen.getByText('Simulate Tier 2 Interrupter');
-    fireEvent.click(simulateButton);
+    // Pre-condition: modal is not open
+    expect(screen.queryByText('Review Destructive File Modification')).toBeNull();
+
+    // Programmatic trigger via event/IPC channel
+    act(() => {
+      window.dispatchEvent(new CustomEvent('horizon:test-trigger-tier2'));
+    });
+
+    // Modal renders safely
     expect(screen.getAllByText('Review Destructive File Modification').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('verifies backend health and connection state via hook state without UI badge', () => {
+    const { result } = renderHook(() => useHorizonAgent());
+    expect(typeof result.current.isConnected).toBe('boolean');
+    expect(typeof result.current.dispatchTask).toBe('function');
+    expect(typeof result.current.submitTier2Decision).toBe('function');
   });
 });

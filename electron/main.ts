@@ -52,9 +52,11 @@ if (process.env.GEMINI_API_KEY) {
 
 let mainWindow: BrowserWindow | null = null;
 let overlayWindow: BrowserWindow | null = null;
+let barWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let agentHost: AgentHost | null = null;
 let isOverlayVisible = false;
+let isBarVisible = false;
 
 let lastCapturedData: {
   dataUrl: string;
@@ -373,6 +375,73 @@ function toggleOverlay(): void {
   }
 }
 
+function createBarWindow(): BrowserWindow {
+  if (barWindow && !barWindow.isDestroyed()) {
+    return barWindow;
+  }
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width: screenWidth, height: screenHeight, y: screenY } = primaryDisplay.workArea;
+
+  const barWidth = 760;
+  const barHeight = 136;
+  const x = Math.round((screenWidth - barWidth) / 2);
+  const y = screenY + screenHeight - barHeight - 20; // 20px docked above Windows taskbar
+
+  barWindow = new BrowserWindow({
+    x,
+    y,
+    width: barWidth,
+    height: barHeight,
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    skipTaskbar: false,
+    resizable: false,
+    show: false,
+    hasShadow: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      backgroundThrottling: false,
+    },
+  });
+
+  loadWindowContent(barWindow, 'bar');
+
+  barWindow.on('closed', () => {
+    barWindow = null;
+    isBarVisible = false;
+  });
+
+  return barWindow;
+}
+
+function showFloatingBar(): void {
+  if (!barWindow || barWindow.isDestroyed()) {
+    createBarWindow();
+  }
+  barWindow?.show();
+  barWindow?.focus();
+  isBarVisible = true;
+}
+
+function hideFloatingBar(): void {
+  if (barWindow && !barWindow.isDestroyed()) {
+    barWindow.hide();
+  }
+  isBarVisible = false;
+}
+
+function toggleFloatingBar(): void {
+  if (isBarVisible && barWindow && barWindow.isVisible()) {
+    hideFloatingBar();
+  } else {
+    showFloatingBar();
+  }
+}
+
 function setupSystemTray(): void {
   // Generate a clean 16x16 celestial icon
   const iconCanvas = nativeImage.createFromBuffer(
@@ -395,22 +464,26 @@ function setupSystemTray(): void {
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Capture Screen (Win+Shift+C)',
-      click: () => triggerRealCaptureAndShowOverlay(),
+      label: 'Summon Floating Bar (Win+Shift+C)',
+      click: () => toggleFloatingBar(),
     },
     {
-      label: 'Show Horizon Cockpit',
+      label: 'Show Full Window',
       click: () => {
-        if (!mainWindow) createMainWindow();
+        if (!mainWindow || mainWindow.isDestroyed()) createMainWindow();
         mainWindow?.show();
         mainWindow?.focus();
       },
+    },
+    {
+      label: 'Screen Capture (Lasso)',
+      click: () => triggerRealCaptureAndShowOverlay(),
     },
     { type: 'separator' },
     {
       label: 'Preferences...',
       click: () => {
-        if (!mainWindow) createMainWindow();
+        if (!mainWindow || mainWindow.isDestroyed()) createMainWindow();
         mainWindow?.show();
         mainWindow?.webContents.send('horizon:open-settings');
       },
@@ -425,14 +498,7 @@ function setupSystemTray(): void {
 
   tray.setContextMenu(contextMenu);
   tray.on('click', () => {
-    if (!mainWindow) {
-      createMainWindow();
-    } else if (mainWindow.isVisible()) {
-      mainWindow.hide();
-    } else {
-      mainWindow.show();
-      mainWindow.focus();
-    }
+    toggleFloatingBar();
   });
 }
 
@@ -494,13 +560,13 @@ app.whenReady().then(async () => {
   }
 
   // Register Global Hotkeys
-  // Win+Shift+C (and CommandOrControl+Shift+C) per §3.1
+  // Win+Shift+C (and CommandOrControl+Shift+C) summons compact floating prompt bar docked above taskbar
   const hotkeys = ['CommandOrControl+Shift+C', 'Super+Shift+C'];
   for (const hk of hotkeys) {
     try {
       globalShortcut.register(hk, () => {
-        console.log(`[Project Horizon] Global Hotkey (${hk}) pressed -> triggering real screen capture`);
-        triggerRealCaptureAndShowOverlay();
+        console.log(`[Project Horizon] Global Hotkey (${hk}) pressed -> toggling floating bar`);
+        toggleFloatingBar();
       });
     } catch {
       // ignore platform-specific registration conflicts
@@ -512,6 +578,9 @@ app.whenReady().then(async () => {
     if (isOverlayVisible) {
       console.log('[Project Horizon] ESC pressed -> closing capture overlay');
       hideOverlay();
+    } else if (isBarVisible) {
+      console.log('[Project Horizon] ESC pressed -> closing floating bar');
+      hideFloatingBar();
     }
   });
 
@@ -523,8 +592,8 @@ app.whenReady().then(async () => {
       try {
         if (!globalShortcut.isRegistered(hk)) {
           globalShortcut.register(hk, () => {
-            console.log(`[Project Horizon] Global Hotkey (${hk}) triggered screen capture`);
-            triggerRealCaptureAndShowOverlay();
+            console.log(`[Project Horizon] Global Hotkey (${hk}) triggered floating bar`);
+            toggleFloatingBar();
           });
           registeredCount++;
         }
@@ -534,6 +603,32 @@ app.whenReady().then(async () => {
     }
     console.log(`[Project Horizon] Hotkey approval confirmed: ${registeredCount} registered`);
     return { success: true, count: registeredCount };
+  });
+
+  ipcMain.handle('horizon:open-main-window', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      createMainWindow();
+    }
+    mainWindow?.show();
+    mainWindow?.focus();
+    hideFloatingBar();
+    return true;
+  });
+
+  ipcMain.handle('horizon:hide-floating-bar', () => {
+    hideFloatingBar();
+    return false;
+  });
+
+  ipcMain.handle('horizon:toggle-floating-bar', () => {
+    toggleFloatingBar();
+    return isBarVisible;
+  });
+
+  ipcMain.handle('horizon:trigger-capture', async () => {
+    hideFloatingBar();
+    await triggerRealCaptureAndShowOverlay();
+    return true;
   });
 
   ipcMain.handle('horizon:capture-desktop', async (_event, targetWindowName?: string) => {
@@ -566,10 +661,12 @@ app.whenReady().then(async () => {
   ipcMain.handle('horizon:attach-area', (_event, data) => {
     console.log('[Project Horizon] Area attached from overlay:', data?.type, data?.coords);
     mainWindow?.webContents.send('horizon:area-attached', data);
+    barWindow?.webContents.send('horizon:area-attached', data);
     hideOverlay();
-    if (mainWindow) {
-      mainWindow.show();
+    if (mainWindow && mainWindow.isVisible()) {
       mainWindow.focus();
+    } else {
+      showFloatingBar();
     }
     return true;
   });
