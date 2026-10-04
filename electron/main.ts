@@ -253,13 +253,15 @@ function loadWindowContent(win: BrowserWindow, hash?: string) {
 
 function createMainWindow(): BrowserWindow {
   const primaryDisplay = screen.getPrimaryDisplay();
-  const { width } = primaryDisplay.workAreaSize;
+  const { width, height } = primaryDisplay.workAreaSize;
 
   mainWindow = new BrowserWindow({
-    width: 680,
-    height: 760,
-    x: width - 700,
-    y: 40,
+    width: Math.min(1160, Math.round(width * 0.85)),
+    height: Math.min(840, Math.round(height * 0.85)),
+    minWidth: 840,
+    minHeight: 600,
+    center: true,
+    autoHideMenuBar: true,
     frame: true,
     transparent: false,
     alwaysOnTop: false,
@@ -272,6 +274,7 @@ function createMainWindow(): BrowserWindow {
     },
   });
 
+  mainWindow.setMenuBarVisibility(false);
   loadWindowContent(mainWindow);
 
   if (agentHost) {
@@ -339,9 +342,8 @@ async function triggerRealCaptureAndShowOverlay(): Promise<void> {
       createOverlayWindow();
     }
 
-    // 3. Send capture data to overlay window and main window
+    // 3. Send capture data to overlay window to render full screen lasso canvas
     overlayWindow?.webContents.send('horizon:desktop-captured', captureData);
-    mainWindow?.webContents.send('horizon:desktop-captured', captureData);
 
     // 4. Show and focus overlay window
     isOverlayVisible = true;
@@ -350,8 +352,6 @@ async function triggerRealCaptureAndShowOverlay(): Promise<void> {
 
     const tReady = performance.now();
     console.log(`[Project Horizon] Real desktop capture -> overlay ready in ${(tReady - t0).toFixed(2)} ms`);
-
-    mainWindow?.webContents.send('horizon:overlay-toggled', true);
   } catch (err) {
     console.error('[Project Horizon] Failed to capture real desktop:', err);
   }
@@ -361,9 +361,8 @@ function hideOverlay(): void {
   const t0 = performance.now();
   isOverlayVisible = false;
   overlayWindow?.hide();
-  mainWindow?.webContents.send('horizon:overlay-toggled', false);
   const t1 = performance.now();
-  console.log(`[Project Horizon] Overlay dismissed via Escape in ${(t1 - t0).toFixed(2)} ms`);
+  console.log(`[Project Horizon] Overlay dismissed in ${(t1 - t0).toFixed(2)} ms`);
 }
 
 function toggleOverlay(): void {
@@ -447,9 +446,13 @@ function spawnPerceptionServiceIfNeeded(): void {
     })
     .catch(() => {
       const candidates = [
+        path.resolve(process.resourcesPath || '', 'perception-service/.venv/Scripts/pythonw.exe'),
         path.resolve(process.resourcesPath || '', 'perception-service/.venv/Scripts/python.exe'),
+        path.resolve(process.cwd(), 'backend/perception-service/.venv/Scripts/pythonw.exe'),
         path.resolve(process.cwd(), 'backend/perception-service/.venv/Scripts/python.exe'),
+        path.resolve(__dirname, '../../backend/perception-service/.venv/Scripts/pythonw.exe'),
         path.resolve(__dirname, '../../backend/perception-service/.venv/Scripts/python.exe'),
+        path.resolve(app.getAppPath(), 'backend/perception-service/.venv/Scripts/pythonw.exe'),
         path.resolve(app.getAppPath(), 'backend/perception-service/.venv/Scripts/python.exe'),
       ];
       const srvCandidates = [
@@ -466,6 +469,7 @@ function spawnPerceptionServiceIfNeeded(): void {
           cwd: path.dirname(srvScript),
           detached: true,
           stdio: 'ignore',
+          windowsHide: true,
         });
         child.unref();
       }

@@ -97,6 +97,7 @@ export class ProjectIndexer {
         encoding: 'utf8',
         maxBuffer: 25 * 1024 * 1024,
         timeout: 8000,
+        windowsHide: true,
       });
       const apps = JSON.parse(raw.trim() || '[]');
       if (Array.isArray(apps)) {

@@ -625,6 +625,7 @@ export class AgentCoordinator {
             child = spawn('cmd.exe', ['/c', 'start', launchCommand, ...launchArgs], {
               detached: true,
               stdio: 'ignore',
+              windowsHide: true,
             });
           } else {
             const isBatch = /\.bat$|\.cmd$/i.test(launchCommand);
@@ -635,6 +636,7 @@ export class AgentCoordinator {
               stdio: 'ignore',
               shell: false,
               env: cleanEnv,
+              windowsHide: true,
             });
           }
           child.unref();

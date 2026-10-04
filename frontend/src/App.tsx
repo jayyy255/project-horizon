@@ -221,6 +221,8 @@ export default function App() {
   // Listen for real desktop capture broadcasts from Electron main process
   useEffect(() => {
     if (typeof window !== 'undefined' && window.horizonAPI) {
+      const isCaptureHash = window.location.hash.includes('capture');
+
       const unsubCapture = window.horizonAPI.onDesktopCaptured((data) => {
         console.log('[App] Real desktop captured from Electron:', data.width, 'x', data.height);
         setRealScreenshotUrl(data.dataUrl);
@@ -230,12 +232,16 @@ export default function App() {
           scaleFactor: data.scaleFactor,
           label: data.displayLabel,
         });
-        setIsCaptureActive(true);
+        if (isCaptureHash) {
+          setIsCaptureActive(true);
+        }
         setIsChatVisible(true);
       });
 
       const unsubOverlay = window.horizonAPI.onOverlayToggled((visible) => {
-        setIsCaptureActive(visible);
+        if (isCaptureHash) {
+          setIsCaptureActive(visible);
+        }
         if (visible) {
           setIsChatVisible(true);
         }
@@ -815,545 +821,479 @@ export default function App() {
       {/* PRIMARY VIEW: HORIZON DESKTOP AGENT COCKPIT                               */}
       {/* ========================================================================= */}
       {viewMode === 'cockpit' && (
-        <main className="relative z-10 flex-1 flex flex-col p-4 sm:p-6 max-w-7xl mx-auto w-full">
-          {/* Simulated Windows 11 Desktop Agent Viewport */}
-          <div className={`relative flex-1 min-h-[680px] rounded-3xl border-2 overflow-hidden shadow-2xl flex flex-col transition-all ${
-            isDarkMode ? 'border-slate-800 bg-[#07090d]' : 'border-slate-200 bg-[#f4f7fb]'
-          }`}>
-            {/* Desktop Wallpaper Art & Ambience */}
+        <main 
+          onClick={handleWorkspaceClick}
+          className="relative z-10 flex-1 flex flex-row overflow-hidden w-full h-[calc(100vh-61px)] select-none"
+        >
+          {isChatVisible ? (
             <div 
-              className="absolute inset-0 pointer-events-none opacity-85 transition-opacity"
-              style={{
-                background: isDarkMode
-                  ? 'radial-gradient(ellipse at 70% 30%, rgba(0, 85, 160, 0.35) 0%, rgba(18, 40, 75, 0.6) 40%, #07090d 100%)'
-                  : 'radial-gradient(ellipse at 70% 30%, rgba(140, 193, 233, 0.45) 0%, rgba(240, 246, 252, 0.9) 60%, #ffffff 100%)'
-              }}
-            />
-
-            {/* Desktop Workspace Content: AI Chatbot App (Google Search AI Mode) */}
-            <div 
-              onClick={handleWorkspaceClick}
-              className="relative z-10 flex-1 flex flex-col justify-between overflow-hidden cursor-default"
+              className="flex-1 flex overflow-hidden w-full h-full"
+              onClick={(e) => e.stopPropagation()}
             >
-              {isChatVisible ? (
-                <div 
-                  className="flex-1 flex overflow-hidden w-full h-full"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {/* LEFT SIDEBAR: Past Conversations & Memory */}
-                  <aside className={`w-72 sm:w-80 border-r flex flex-col justify-between flex-shrink-0 transition-colors ${
-                    isDarkMode ? 'border-slate-800/80 bg-[#0a0d13]/85' : 'border-slate-200/90 bg-white/85'
-                  } backdrop-blur-2xl`}>
-                    {/* Sidebar Header & New Chat Button */}
-                    <div className="p-3.5 border-b border-slate-200/60 dark:border-slate-800/60 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <MessageSquare size={15} className="text-[#8CC1E9]" />
-                          <span className="text-xs font-bold uppercase tracking-wider horizon-gradient-text">Past Chats</span>
-                        </div>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#8CC1E9]/15 text-[#0055A0] dark:text-[#8CC1E9] border border-[#8CC1E9]/30">
-                          {chatSessions.length}
-                        </span>
-                      </div>
+              {/* LEFT SIDEBAR: Past Conversations & Memory */}
+              <aside className={`w-72 sm:w-80 border-r flex flex-col justify-between flex-shrink-0 transition-colors ${
+                isDarkMode ? 'border-slate-800/80 bg-[#0a0d13]/90' : 'border-slate-200/90 bg-white/90'
+              } backdrop-blur-2xl`}>
+                {/* Sidebar Header & New Chat Button */}
+                <div className="p-3.5 border-b border-slate-200/60 dark:border-slate-800/60 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare size={15} className="text-[#8CC1E9]" />
+                      <span className="text-xs font-bold uppercase tracking-wider horizon-gradient-text">Past Chats</span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#8CC1E9]/15 text-[#0055A0] dark:text-[#8CC1E9] border border-[#8CC1E9]/30">
+                      {chatSessions.length}
+                    </span>
+                  </div>
 
-                      {/* New Chat Button */}
-                      <button
-                        onClick={handleNewChat}
-                        className="w-full py-2 px-3 rounded-2xl text-xs font-bold bg-gradient-to-r from-[#0055A0] via-[#438BC4] to-[#8CC1E9] text-[#FFF8E7] flex items-center justify-center gap-1.5 shadow-md shadow-[#438BC4]/25 hover:brightness-110 transition-all border border-[#FFF8E7]/30"
+                  {/* New Chat Button */}
+                  <button
+                    onClick={handleNewChat}
+                    className="w-full py-2 px-3 rounded-2xl text-xs font-bold bg-gradient-to-r from-[#0055A0] via-[#438BC4] to-[#8CC1E9] text-[#FFF8E7] flex items-center justify-center gap-1.5 shadow-md shadow-[#438BC4]/25 hover:brightness-110 transition-all border border-[#FFF8E7]/30"
+                  >
+                    <Plus size={15} />
+                    <span>New Chat</span>
+                  </button>
+                </div>
+
+                {/* Scrollable Past Chat Sessions List */}
+                <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
+                  {chatSessions.map((session) => {
+                    const isSelected = session.id === activeSessionId;
+                    return (
+                      <div
+                        key={session.id}
+                        onClick={() => handleSelectSession(session.id)}
+                        className={`group relative p-2.5 rounded-2xl border cursor-pointer transition-all ${
+                          isSelected
+                            ? 'border-[#8CC1E9] bg-[#8CC1E9]/15 shadow-md shadow-[#438BC4]/20'
+                            : 'border-slate-200/70 dark:border-slate-800/70 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/60 dark:bg-carbon-850/60'
+                        }`}
                       >
-                        <Plus size={15} />
-                        <span>New Chat</span>
+                        <div className="flex items-center gap-2.5">
+                          {session.thumbnail ? (
+                            <img
+                              src={session.thumbnail}
+                              alt="crop"
+                              className="w-9 h-9 rounded-xl object-cover border border-[#8CC1E9]/40 flex-shrink-0"
+                            />
+                          ) : (
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                              isSelected ? 'bg-[#0055A0] text-[#FFF8E7]' : 'bg-slate-200 dark:bg-carbon-800 text-slate-500'
+                            }`}>
+                              <GeminiSparkle size={15} />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0 pr-6">
+                            <div className="text-xs font-semibold truncate text-slate-800 dark:text-slate-200">
+                              {session.title}
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono mt-0.5">
+                              <Clock size={10} />
+                              <span>{session.time}</span>
+                              <span>·</span>
+                              <span>{session.messages.length} turns</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Delete Chat Button on Hover */}
+                        <button
+                          onClick={(e) => handleDeleteSession(session.id, e)}
+                          className="absolute top-3 right-2.5 p-1 rounded-lg text-slate-400 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Delete chat"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Sidebar Footer: Global Hotkey, Privacy, and Utilities */}
+                <div className="p-3 border-t border-slate-200/60 dark:border-slate-800/60 space-y-2">
+                  <div className="flex items-center justify-between text-[11px] font-mono">
+                    <span className="text-slate-500">Screen Hotkey:</span>
+                    <kbd className="px-1.5 py-0.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-carbon-900 font-bold text-[#0055A0] dark:text-[#8CC1E9]">
+                      Win+Shift+C
+                    </kbd>
+                  </div>
+                  <div className="text-[10px] text-slate-400 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    <span>All conversations encrypted on device</span>
+                  </div>
+
+                  {/* Actions & Utilities Bar in Sidebar Footer */}
+                  <div className="pt-1 flex items-center justify-between border-t border-slate-200/50 dark:border-slate-800/50">
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setShowSettingsModal(true)}
+                        className="p-1.5 rounded-xl hover:bg-slate-200/70 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
+                        title="Open Preferences & Controls"
+                      >
+                        <Sliders size={15} />
+                      </button>
+                      <button
+                        onClick={() => setShowHistoryDrawer(true)}
+                        className="p-1.5 rounded-xl hover:bg-slate-200/70 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
+                        title="Open Session History"
+                      >
+                        <History size={15} />
+                      </button>
+                      <button
+                        onClick={() => setShowTrayPopover(prev => !prev)}
+                        className={`p-1.5 rounded-xl border transition-all ${
+                          showTrayPopover 
+                            ? 'border-[#8CC1E9] bg-[#8CC1E9]/20 text-[#0055A0] dark:text-[#8CC1E9]' 
+                            : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
+                        }`}
+                        title="Project Horizon System Tray Menu"
+                      >
+                        <GeminiSparkle size={15} />
                       </button>
                     </div>
 
-                    {/* Scrollable Past Chat Sessions List */}
-                    <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
-                      {chatSessions.map((session) => {
-                        const isSelected = session.id === activeSessionId;
-                        return (
-                          <div
-                            key={session.id}
-                            onClick={() => handleSelectSession(session.id)}
-                            className={`group relative p-2.5 rounded-2xl border cursor-pointer transition-all ${
-                              isSelected
-                                ? 'border-[#8CC1E9] bg-[#8CC1E9]/15 shadow-md shadow-[#438BC4]/20'
-                                : 'border-slate-200/70 dark:border-slate-800/70 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/60 dark:bg-carbon-850/60'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2.5">
-                              {session.thumbnail ? (
-                                <img
-                                  src={session.thumbnail}
-                                  alt="crop"
-                                  className="w-9 h-9 rounded-xl object-cover border border-[#8CC1E9]/40 flex-shrink-0"
+                    <button
+                      onClick={() => setShowConsentModal(true)}
+                      className="text-[11px] text-[#438BC4] hover:underline font-medium"
+                    >
+                      Privacy Agreement
+                    </button>
+                  </div>
+
+                  {/* SYSTEM TRAY POPOVER (Anchored above utility bar) */}
+                  {showTrayPopover && (
+                    <div className="relative z-50 animate-fade-in shadow-2xl">
+                      <SystemTrayPopover
+                        isDarkMode={isDarkMode}
+                        onOpenHUD={() => {
+                          setIsTraceExpanded(true);
+                          setShowTrayPopover(false);
+                        }}
+                        onOpenHistory={() => {
+                          setShowHistoryDrawer(true);
+                          setShowTrayPopover(false);
+                        }}
+                        onOpenPreferences={() => {
+                          setShowSettingsModal(true);
+                          setShowTrayPopover(false);
+                        }}
+                        onQuit={() => setShowTrayPopover(false)}
+                      />
+                    </div>
+                  )}
+                </div>
+              </aside>
+
+              {/* RIGHT MAIN CHAT AREA: Conversation Stream + Prompt Dock */}
+              <section className="flex-1 flex flex-col justify-between overflow-hidden relative">
+                {/* Active Chat Header */}
+                <div className={`px-4 sm:px-6 py-2.5 border-b backdrop-blur-xl flex items-center justify-between transition-colors ${
+                  isDarkMode ? 'border-slate-800/70 bg-[#07090d]/60' : 'border-slate-200/80 bg-white/60'
+                }`}>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded-xl bg-[#8CC1E9]/20 flex items-center justify-center text-[#0055A0] dark:text-[#8CC1E9]">
+                      <GeminiSparkle size={14} />
+                    </div>
+                    <div className="truncate">
+                      <h2 className="text-xs sm:text-sm font-bold truncate text-slate-900 dark:text-slate-100">
+                        {chatSessions.find(s => s.id === activeSessionId)?.title || 'New Conversation'}
+                      </h2>
+                      <div className="text-[10px] font-mono text-emerald-500 dark:text-emerald-400 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>Google Search AI Mode Active</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleTriggerLasso}
+                      className="px-2.5 py-1.5 rounded-xl border border-[#8CC1E9]/40 bg-[#8CC1E9]/10 text-[#0055A0] dark:text-[#8CC1E9] text-xs font-semibold flex items-center gap-1 hover:bg-[#8CC1E9]/20 transition-all"
+                      title="Lasso screen region (Win+Shift+C)"
+                    >
+                      <Camera size={13} />
+                      <span className="hidden sm:inline">Lasso</span>
+                    </button>
+                    <button
+                      onClick={handleQuickFullScreenCapture}
+                      className="px-2.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold flex items-center gap-1 hover:border-[#8CC1E9] transition-all"
+                      title="Capture Full Desktop"
+                    >
+                      <Monitor size={13} />
+                      <span className="hidden sm:inline">Full Screen</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Messages Scrollable Feed */}
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+                  {/* Active Dynamic App Windows (e.g. VS Code, Graph) */}
+                  {activeApps.length > 0 && (
+                    <div className="space-y-3 mb-4 animate-fade-in">
+                      {activeApps.map((app) => (
+                        <div 
+                          key={app.id}
+                          className={`p-4 rounded-2xl border shadow-xl backdrop-blur-md transition-all ${
+                            isDarkMode ? 'bg-[#0f141c]/90 border-slate-700/80 text-slate-200' : 'bg-white/95 border-slate-300 text-slate-800'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-800/60 mb-2.5">
+                            <div className="flex items-center gap-2">
+                              <div className="flex gap-1.5">
+                                <button 
+                                  onClick={() => setActiveApps(prev => prev.filter(a => a.id !== app.id))}
+                                  className="w-2.5 h-2.5 rounded-full bg-rose-500/90 hover:opacity-100 transition-opacity" 
+                                  title="Close Window"
                                 />
-                              ) : (
-                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                                  isSelected ? 'bg-[#0055A0] text-[#FFF8E7]' : 'bg-slate-200 dark:bg-carbon-800 text-slate-500'
-                                }`}>
-                                  <GeminiSparkle size={15} />
-                                </div>
-                              )}
-                              <div className="flex-1 min-w-0 pr-6">
-                                <div className="text-xs font-semibold truncate text-slate-800 dark:text-slate-200">
-                                  {session.title}
-                                </div>
-                                <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono mt-0.5">
-                                  <Clock size={10} />
-                                  <span>{session.time}</span>
-                                  <span>·</span>
-                                  <span>{session.messages.length} turns</span>
-                                </div>
+                                <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
+                                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
+                              </div>
+                              <div className="flex items-center gap-1.5 text-xs font-mono font-semibold pl-1">
+                                {app.type === 'vscode' && <Code2 size={13} className="text-[#438BC4]" />}
+                                {app.type === 'graph' && <Layers size={13} className="text-emerald-400" />}
+                                <span>{app.title}</span>
                               </div>
                             </div>
-
-                            {/* Delete Chat Button on Hover */}
-                            <button
-                              onClick={(e) => handleDeleteSession(session.id, e)}
-                              className="absolute top-3 right-2.5 p-1 rounded-lg text-slate-400 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                              title="Delete chat"
-                            >
-                              <Trash2 size={13} />
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-mono text-slate-400">PID: {app.pid}</span>
+                              <button 
+                                onClick={() => setActiveApps(prev => prev.filter(a => a.id !== app.id))}
+                                className="text-slate-400 hover:text-rose-400 p-0.5"
+                                title="Close"
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
                           </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Sidebar Footer: Global Hotkey & Local Guarantee */}
-                    <div className="p-3 border-t border-slate-200/60 dark:border-slate-800/60 space-y-1.5">
-                      <div className="flex items-center justify-between text-[11px] font-mono">
-                        <span className="text-slate-500">Screen Hotkey:</span>
-                        <kbd className="px-1.5 py-0.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-carbon-900 font-bold text-[#0055A0] dark:text-[#8CC1E9]">
-                          Win+Shift+C
-                        </kbd>
-                      </div>
-                      <div className="text-[10px] text-slate-400 flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                        <span>All conversations encrypted on device</span>
-                      </div>
-                    </div>
-                  </aside>
-
-                  {/* RIGHT MAIN CHAT AREA: Conversation Stream + Prompt Dock */}
-                  <section className="flex-1 flex flex-col justify-between overflow-hidden relative">
-                    {/* Active Chat Header */}
-                    <div className={`px-4 sm:px-6 py-2.5 border-b backdrop-blur-xl flex items-center justify-between transition-colors ${
-                      isDarkMode ? 'border-slate-800/70 bg-[#07090d]/60' : 'border-slate-200/80 bg-white/60'
-                    }`}>
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-7 h-7 rounded-xl bg-[#8CC1E9]/20 flex items-center justify-center text-[#0055A0] dark:text-[#8CC1E9]">
-                          <GeminiSparkle size={14} />
+                          {app.type === 'vscode' && (
+                            <div className="font-mono text-xs text-slate-400 space-y-1">
+                              <div className="text-[#8CC1E9]">// {app.activeFile}</div>
+                              <div className="text-slate-200 dark:text-slate-300">{app.codeSnippet}</div>
+                            </div>
+                          )}
+                          {app.type === 'graph' && app.graphData && (
+                            <div className="font-mono text-xs text-slate-400 space-y-1.5">
+                              <div className="text-emerald-400 font-semibold">{app.graphData.label}</div>
+                              <div className="flex items-center gap-3 text-[11px]">
+                                <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                  {app.graphData.nodes} Nodes
+                                </span>
+                                <span className="px-2 py-0.5 rounded bg-[#8CC1E9]/15 text-[#8CC1E9] border border-[#8CC1E9]/30">
+                                  {app.graphData.edges} Edges
+                                </span>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <div className="truncate">
-                          <h2 className="text-xs sm:text-sm font-bold truncate text-slate-900 dark:text-slate-100">
-                            {chatSessions.find(s => s.id === activeSessionId)?.title || 'New Conversation'}
-                          </h2>
-                          <div className="text-[10px] font-mono text-emerald-500 dark:text-emerald-400 flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            <span>Google Search AI Mode Active</span>
-                          </div>
-                        </div>
-                      </div>
+                      ))}
+                    </div>
+                  )}
 
-                      <div className="flex items-center gap-2">
+                  {/* If Current Session Has No Messages -> Show Google Search AI Mode Hero */}
+                  {(!chatSessions.find(s => s.id === activeSessionId)?.messages?.length) && (
+                    <div className="my-auto py-8 flex flex-col items-center justify-center text-center animate-fade-in max-w-lg mx-auto">
+                      <div className="w-14 h-14 rounded-3xl bg-gradient-to-tr from-[#12284B] via-[#0055A0] to-[#8CC1E9] flex items-center justify-center text-[#FFF8E7] shadow-xl shadow-[#0055A0]/25 border border-[#FFF8E7]/40 mb-3">
+                        <GeminiSparkle size={28} />
+                      </div>
+                      <h3 className="text-base font-bold horizon-gradient-text">
+                        Google Search AI Mode for Desktop
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 mb-5">
+                        Grounded visual search, code analysis, and Windows automation. Circle any area with <kbd className="px-1.5 py-0.5 rounded border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-carbon-800 font-mono text-xs font-bold text-[#0055A0] dark:text-[#8CC1E9]">Win+Shift+C</kbd> or continue a conversation below.
+                      </p>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full text-left">
+                        <button
+                          onClick={() => handleTaskSubmit("Explain compile error in WebGL vertex shader", [])}
+                          className="p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/70 dark:bg-carbon-850/70 hover:border-[#8CC1E9] transition-all text-xs text-slate-700 dark:text-slate-300 flex items-start gap-2 shadow-xs"
+                        >
+                          <Sparkles size={14} className="text-[#8CC1E9] flex-shrink-0 mt-0.5" />
+                          <span>Explain compile error in WebGL vertex shader</span>
+                        </button>
+                        <button
+                          onClick={() => handleTaskSubmit("Open target repo in VS Code and branch to feature/liquid", [])}
+                          className="p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/70 dark:bg-carbon-850/70 hover:border-[#8CC1E9] transition-all text-xs text-slate-700 dark:text-slate-300 flex items-start gap-2 shadow-xs"
+                        >
+                          <Code2 size={14} className="text-[#438BC4] flex-shrink-0 mt-0.5" />
+                          <span>Open target repo in VS Code</span>
+                        </button>
+                        <button
+                          onClick={() => handleTaskSubmit("open calculator", [])}
+                          className="p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/70 dark:bg-carbon-850/70 hover:border-[#8CC1E9] transition-all text-xs text-slate-700 dark:text-slate-300 flex items-start gap-2 shadow-xs"
+                        >
+                          <Terminal size={14} className="text-emerald-400 flex-shrink-0 mt-0.5" />
+                          <span>Launch Calculator &amp; calculate 42</span>
+                        </button>
                         <button
                           onClick={handleTriggerLasso}
-                          className="px-2.5 py-1.5 rounded-xl border border-[#8CC1E9]/40 bg-[#8CC1E9]/10 text-[#0055A0] dark:text-[#8CC1E9] text-xs font-semibold flex items-center gap-1 hover:bg-[#8CC1E9]/20 transition-all"
-                          title="Lasso screen region (Win+Shift+C)"
+                          className="p-3 rounded-2xl border border-[#8CC1E9]/40 bg-[#8CC1E9]/10 hover:bg-[#8CC1E9]/20 transition-all text-xs text-[#0055A0] dark:text-[#8CC1E9] flex items-start gap-2 shadow-xs"
                         >
-                          <Camera size={13} />
-                          <span className="hidden sm:inline">Lasso</span>
-                        </button>
-                        <button
-                          onClick={handleQuickFullScreenCapture}
-                          className="px-2.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold flex items-center gap-1 hover:border-[#8CC1E9] transition-all"
-                          title="Capture Full Desktop"
-                        >
-                          <Monitor size={13} />
-                          <span className="hidden sm:inline">Full Screen</span>
+                          <Camera size={14} className="text-[#8CC1E9] flex-shrink-0 mt-0.5" />
+                          <span>Circle screen area to inspect</span>
                         </button>
                       </div>
                     </div>
+                  )}
 
-                    {/* Messages Scrollable Feed */}
-                    <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
-                      {/* Active Dynamic App Windows (e.g. VS Code, Graph) */}
-                      {activeApps.length > 0 && (
-                        <div className="space-y-3 mb-4 animate-fade-in">
-                          {activeApps.map((app) => (
-                            <div 
-                              key={app.id}
-                              className={`p-4 rounded-2xl border shadow-xl backdrop-blur-md transition-all ${
-                                isDarkMode ? 'bg-[#0f141c]/90 border-slate-700/80 text-slate-200' : 'bg-white/95 border-slate-300 text-slate-800'
-                              }`}
+                  {/* Render Current Chat Conversation Messages */}
+                  {chatSessions.find(s => s.id === activeSessionId)?.messages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'} space-y-1.5 animate-slide-up`}
+                    >
+                      {/* Attachments if user attached screen captures */}
+                      {msg.attachments && msg.attachments.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-1 justify-end max-w-lg">
+                          {msg.attachments.map((att) => (
+                            <div
+                              key={att.id}
+                              className="p-1.5 rounded-2xl bg-white dark:bg-carbon-800 border border-[#8CC1E9]/40 shadow-sm flex items-center gap-2"
                             >
-                              <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-800/60 mb-2.5">
-                                <div className="flex items-center gap-2">
-                                  <div className="flex gap-1.5">
-                                    <button 
-                                      onClick={() => setActiveApps(prev => prev.filter(a => a.id !== app.id))}
-                                      className="w-2.5 h-2.5 rounded-full bg-rose-500/90 hover:opacity-100 transition-opacity" 
-                                      title="Close Window"
-                                    />
-                                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
-                                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
-                                  </div>
-                                  <div className="flex items-center gap-1.5 text-xs font-mono font-semibold pl-1">
-                                    {app.type === 'vscode' && <Code2 size={13} className="text-[#438BC4]" />}
-                                    {app.type === 'graph' && <Layers size={13} className="text-emerald-400" />}
-                                    <span>{app.title}</span>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[10px] font-mono text-slate-400">PID: {app.pid}</span>
-                                  <button 
-                                    onClick={() => setActiveApps(prev => prev.filter(a => a.id !== app.id))}
-                                    className="text-slate-400 hover:text-rose-400 p-0.5"
-                                    title="Close"
-                                  >
-                                    <X size={12} />
-                                  </button>
-                                </div>
+                              {att.croppedDataUrl && (
+                                <img
+                                  src={att.croppedDataUrl}
+                                  alt="attachment"
+                                  className="w-14 h-14 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
+                                />
+                              )}
+                              <div className="pr-2 text-[10px] font-mono text-[#0055A0] dark:text-[#8CC1E9]">
+                                <span className="font-bold">{att.label}</span>
+                                {att.coords && <div>{att.coords.w}×{att.coords.h}px</div>}
                               </div>
-                              {app.type === 'vscode' && (
-                                <div className="font-mono text-xs text-slate-400 space-y-1">
-                                  <div className="text-[#8CC1E9]">// {app.activeFile}</div>
-                                  <div className="text-slate-200 dark:text-slate-300">{app.codeSnippet}</div>
-                                </div>
-                              )}
-                              {app.type === 'graph' && app.graphData && (
-                                <div className="font-mono text-xs text-slate-400 space-y-1.5">
-                                  <div className="text-emerald-400 font-semibold">{app.graphData.label}</div>
-                                  <div className="flex items-center gap-3 text-[11px]">
-                                    <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                                      {app.graphData.nodes} Nodes
-                                    </span>
-                                    <span className="px-2 py-0.5 rounded bg-[#8CC1E9]/15 text-[#8CC1E9] border border-[#8CC1E9]/30">
-                                      {app.graphData.edges} Edges
-                                    </span>
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           ))}
                         </div>
                       )}
 
-                      {/* If Current Session Has No Messages -> Show Google Search AI Mode Hero */}
-                      {(!chatSessions.find(s => s.id === activeSessionId)?.messages?.length) && (
-                        <div className="my-auto py-8 flex flex-col items-center justify-center text-center animate-fade-in max-w-lg mx-auto">
-                          <div className="w-14 h-14 rounded-3xl bg-gradient-to-tr from-[#12284B] via-[#0055A0] to-[#8CC1E9] flex items-center justify-center text-[#FFF8E7] shadow-xl shadow-[#0055A0]/25 border border-[#FFF8E7]/40 mb-3">
-                            <GeminiSparkle size={28} />
+                      {/* Message Bubble */}
+                      <div
+                        className={`p-3.5 sm:p-4 rounded-3xl max-w-2xl text-xs sm:text-[13px] leading-relaxed transition-all shadow-md ${
+                          msg.sender === 'user'
+                            ? 'bg-gradient-to-r from-[#0055A0] via-[#438BC4] to-[#8CC1E9] text-[#FFF8E7] rounded-br-sm border border-[#FFF8E7]/30'
+                            : 'bg-white/90 dark:bg-carbon-850/90 text-slate-800 dark:text-slate-100 rounded-bl-sm border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-md'
+                        }`}
+                      >
+                        {msg.sender === 'assistant' && (
+                          <div className="flex items-center gap-2 pb-2 mb-2 border-b border-slate-200/60 dark:border-slate-800/60">
+                            <GeminiSparkle size={15} />
+                            <span className="font-bold text-xs horizon-gradient-text">Horizon AI Overview</span>
                           </div>
-                          <h3 className="text-base font-bold horizon-gradient-text">
-                            Google Search AI Mode for Desktop
-                          </h3>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 mb-5">
-                            Grounded visual search, code analysis, and Windows automation. Circle any area with <kbd className="px-1.5 py-0.5 rounded border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-carbon-800 font-mono text-xs font-bold text-[#0055A0] dark:text-[#8CC1E9]">Win+Shift+C</kbd> or continue a conversation below.
-                          </p>
+                        )}
+                        <div className="whitespace-pre-wrap font-sans">{msg.text}</div>
+                      </div>
 
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full text-left">
-                            <button
-                              onClick={() => handleTaskSubmit("Explain compile error in WebGL vertex shader", [])}
-                              className="p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/70 dark:bg-carbon-850/70 hover:border-[#8CC1E9] transition-all text-xs text-slate-700 dark:text-slate-300 flex items-start gap-2 shadow-xs"
-                            >
-                              <Sparkles size={14} className="text-[#8CC1E9] flex-shrink-0 mt-0.5" />
-                              <span>Explain compile error in WebGL vertex shader</span>
-                            </button>
-                            <button
-                              onClick={() => handleTaskSubmit("Open target repo in VS Code and branch to feature/liquid", [])}
-                              className="p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/70 dark:bg-carbon-850/70 hover:border-[#8CC1E9] transition-all text-xs text-slate-700 dark:text-slate-300 flex items-start gap-2 shadow-xs"
-                            >
-                              <Code2 size={14} className="text-[#438BC4] flex-shrink-0 mt-0.5" />
-                              <span>Open target repo in VS Code</span>
-                            </button>
-                            <button
-                              onClick={() => handleTaskSubmit("open calculator", [])}
-                              className="p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/70 dark:bg-carbon-850/70 hover:border-[#8CC1E9] transition-all text-xs text-slate-700 dark:text-slate-300 flex items-start gap-2 shadow-xs"
-                            >
-                              <Terminal size={14} className="text-emerald-400 flex-shrink-0 mt-0.5" />
-                              <span>Launch Calculator &amp; calculate 42</span>
-                            </button>
-                            <button
-                              onClick={handleTriggerLasso}
-                              className="p-3 rounded-2xl border border-[#8CC1E9]/40 bg-[#8CC1E9]/10 hover:bg-[#8CC1E9]/20 transition-all text-xs text-[#0055A0] dark:text-[#8CC1E9] flex items-start gap-2 shadow-xs"
-                            >
-                              <Camera size={14} className="text-[#8CC1E9] flex-shrink-0 mt-0.5" />
-                              <span>Circle screen area to inspect</span>
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Render Current Chat Conversation Messages */}
-                      {chatSessions.find(s => s.id === activeSessionId)?.messages.map((msg) => (
-                        <div
-                          key={msg.id}
-                          className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'} space-y-1.5 animate-slide-up`}
-                        >
-                          {/* Attachments if user attached screen captures */}
-                          {msg.attachments && msg.attachments.length > 0 && (
-                            <div className="flex flex-wrap gap-2 mb-1 justify-end max-w-lg">
-                              {msg.attachments.map((att) => (
-                                <div
-                                  key={att.id}
-                                  className="p-1.5 rounded-2xl bg-white dark:bg-carbon-800 border border-[#8CC1E9]/40 shadow-sm flex items-center gap-2"
-                                >
-                                  {att.croppedDataUrl && (
-                                    <img
-                                      src={att.croppedDataUrl}
-                                      alt="attachment"
-                                      className="w-14 h-14 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
-                                    />
-                                  )}
-                                  <div className="pr-2 text-[10px] font-mono text-[#0055A0] dark:text-[#8CC1E9]">
-                                    <span className="font-bold">{att.label}</span>
-                                    {att.coords && <div>{att.coords.w}×{att.coords.h}px</div>}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* Message Bubble */}
-                          <div
-                            className={`p-3.5 sm:p-4 rounded-3xl max-w-2xl text-xs sm:text-[13px] leading-relaxed transition-all shadow-md ${
-                              msg.sender === 'user'
-                                ? 'bg-gradient-to-r from-[#0055A0] via-[#438BC4] to-[#8CC1E9] text-[#FFF8E7] rounded-br-sm border border-[#FFF8E7]/30'
-                                : 'bg-white/90 dark:bg-carbon-850/90 text-slate-800 dark:text-slate-100 rounded-bl-sm border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-md'
-                            }`}
-                          >
-                            {msg.sender === 'assistant' && (
-                              <div className="flex items-center gap-2 pb-2 mb-2 border-b border-slate-200/60 dark:border-slate-800/60">
-                                <GeminiSparkle size={15} />
-                                <span className="font-bold text-xs horizon-gradient-text">Horizon AI Overview</span>
-                              </div>
-                            )}
-                            <div className="whitespace-pre-wrap font-sans">{msg.text}</div>
-                          </div>
-
-                          <span className="text-[10px] font-mono text-slate-400 px-1">
-                            {msg.timestamp}
-                          </span>
-                        </div>
-                      ))}
-
-                      {/* Thinking / Working Indicator */}
-                      {(isExecuting || sessionState?.status === 'working') && (
-                        <div className="flex items-start gap-2.5 animate-fade-in max-w-lg">
-                          <div className="w-7 h-7 rounded-xl bg-[#8CC1E9]/20 flex items-center justify-center text-[#8CC1E9] flex-shrink-0 animate-spin">
-                            <GeminiSparkle size={14} />
-                          </div>
-                          <div className="p-3 rounded-2xl bg-white/90 dark:bg-carbon-850/90 border border-[#8CC1E9]/40 text-xs text-slate-700 dark:text-slate-300 shadow-sm flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-[#8CC1E9] animate-ping" />
-                            <span>{sessionState?.currentNarration || 'Perceiving desktop & formulating action plan...'}</span>
-                          </div>
-                        </div>
-                      )}
+                      <span className="text-[10px] font-mono text-slate-400 px-1">
+                        {msg.timestamp}
+                      </span>
                     </div>
+                  ))}
 
-                    {/* DOCKED AT THE BOTTOM: Contextual Prompt Bar */}
-                    <div className="p-3 sm:p-4 border-t backdrop-blur-2xl border-slate-200/70 dark:border-slate-800/70">
-                      {/* Collapsible HUD Logs Indicator */}
-                      {(sessionState?.status === 'working' || sessionState?.status === 'done' || sessionState?.status === 'error' || isExecuting || (liveTraceSteps && liveTraceSteps.length > 0)) && (
-                        <div className="mb-2 flex flex-col items-center">
-                          {isTraceExpanded && (
-                            <div className="w-full max-h-60 overflow-y-auto mb-2 shadow-2xl">
-                              <ReActTracePanel
-                                isDarkMode={isDarkMode}
-                                steps={liveTraceSteps}
-                                onClose={() => setIsTraceExpanded(false)}
-                              />
-                            </div>
-                          )}
-                          <HUDCollapsedChip
+                  {/* Thinking / Working Indicator */}
+                  {(isExecuting || sessionState?.status === 'working') && (
+                    <div className="flex items-start gap-2.5 animate-fade-in max-w-lg">
+                      <div className="w-7 h-7 rounded-xl bg-[#8CC1E9]/20 flex items-center justify-center text-[#8CC1E9] flex-shrink-0 animate-spin">
+                        <GeminiSparkle size={14} />
+                      </div>
+                      <div className="p-3 rounded-2xl bg-white/90 dark:bg-carbon-850/90 border border-[#8CC1E9]/40 text-xs text-slate-700 dark:text-slate-300 shadow-sm flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-[#8CC1E9] animate-ping" />
+                        <span>{sessionState?.currentNarration || 'Perceiving desktop & formulating action plan...'}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* DOCKED AT THE BOTTOM: Contextual Prompt Bar */}
+                <div className="p-3 sm:p-4 border-t backdrop-blur-2xl border-slate-200/70 dark:border-slate-800/70">
+                  {/* Collapsible HUD Logs Indicator */}
+                  {(sessionState?.status === 'working' || sessionState?.status === 'done' || sessionState?.status === 'error' || isExecuting || (liveTraceSteps && liveTraceSteps.length > 0)) && (
+                    <div className="mb-2 flex flex-col items-center">
+                      {isTraceExpanded && (
+                        <div className="w-full max-h-60 overflow-y-auto mb-2 shadow-2xl">
+                          <ReActTracePanel
                             isDarkMode={isDarkMode}
-                            isExpanded={isTraceExpanded}
-                            onToggleLogs={() => setIsTraceExpanded(prev => !prev)}
-                            currentNarration={sessionState?.currentNarration}
+                            steps={liveTraceSteps}
+                            onClose={() => setIsTraceExpanded(false)}
                           />
                         </div>
                       )}
-
-                      <ContextualPromptBar
+                      <HUDCollapsedChip
                         isDarkMode={isDarkMode}
-                        attachments={attachments}
-                        onRemoveAttachment={handleRemoveAttachment}
-                        onClearAttachments={handleClearAttachments}
-                        onTriggerLasso={handleTriggerLasso}
-                        onTriggerFullScreen={handleQuickFullScreenCapture}
-                        onSubmitPrompt={handleTaskSubmit}
+                        isExpanded={isTraceExpanded}
+                        onToggleLogs={() => setIsTraceExpanded(prev => !prev)}
+                        currentNarration={sessionState?.currentNarration}
                       />
                     </div>
-                  </section>
-                </div>
-              ) : (
-                /* When chat is dismissed: Prompt user to re-summon */
-                <div className="mx-auto my-auto flex flex-col items-center gap-3 text-center animate-fade-in p-6">
-                  <div className="w-12 h-12 rounded-3xl bg-gradient-to-tr from-[#12284B] via-[#0055A0] to-[#8CC1E9] flex items-center justify-center text-[#FFF8E7] shadow-xl shadow-[#0055A0]/25 border border-[#FFF8E7]/40 mb-1">
-                    <GeminiSparkle size={24} />
-                  </div>
-                  <div className="text-sm font-semibold horizon-gradient-text">
-                    Project Horizon Desktop Agent
-                  </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                    <span>Press</span>
-                    <kbd className="px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-carbon-800 font-mono font-bold text-[#0055A0] dark:text-[#8CC1E9]">
-                      Ctrl + Shift + C
-                    </kbd>
-                    <span>or click below to summon chat</span>
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsChatVisible(true);
-                    }}
-                    className="mt-2 px-4 py-2 rounded-2xl text-xs font-bold bg-gradient-to-r from-[#0055A0] via-[#438BC4] to-[#8CC1E9] text-[#FFF8E7] shadow-lg shadow-[#438BC4]/30 hover:brightness-110 transition-all border border-[#FFF8E7]/30 flex items-center gap-2"
-                  >
-                    <GeminiSparkle size={14} />
-                    <span>Summon Horizon Chat</span>
-                  </button>
-                </div>
-              )}
-            </div>
+                  )}
 
-            {/* FULL-SCREEN SCREEN CAPTURE OVERLAY (When user triggers lasso or capture) */}
-            {isCaptureActive && (
-              <div className="absolute inset-0 z-40 bg-black/60 backdrop-blur-sm p-4 flex items-center justify-center animate-fade-in">
-                <div className="w-full max-w-4xl relative">
-                  <CaptureOverlayCanvas
+                  <ContextualPromptBar
                     isDarkMode={isDarkMode}
-                    screenshotUrl={realScreenshotUrl}
-                    displayInfo={captureDisplayInfo}
-                    onExit={() => {
-                      setIsCaptureActive(false);
-                      if (typeof window !== 'undefined' && window.horizonAPI) window.horizonAPI.closeOverlay();
-                    }}
-                    onAttachArea={(data) => {
-                      handleAddAttachment(data);
-                      if (typeof window !== 'undefined' && window.horizonAPI) window.horizonAPI.closeOverlay();
-                    }}
+                    attachments={attachments}
+                    onRemoveAttachment={handleRemoveAttachment}
+                    onClearAttachments={handleClearAttachments}
+                    onTriggerLasso={handleTriggerLasso}
+                    onTriggerFullScreen={handleQuickFullScreenCapture}
+                    onSubmitPrompt={handleTaskSubmit}
                   />
-                  <button
-                    onClick={() => setIsCaptureActive(false)}
-                    className="absolute top-4 right-4 p-2 rounded-full bg-slate-800 text-white hover:bg-slate-700 shadow-xl border border-slate-600"
-                    title="Close Screen Capture (Esc)"
-                  >
-                    <X size={16} />
-                  </button>
                 </div>
+              </section>
+            </div>
+          ) : (
+            /* When chat is dismissed: Prompt user to re-summon */
+            <div className="mx-auto my-auto flex flex-col items-center gap-3 text-center animate-fade-in p-6">
+              <div className="w-12 h-12 rounded-3xl bg-gradient-to-tr from-[#12284B] via-[#0055A0] to-[#8CC1E9] flex items-center justify-center text-[#FFF8E7] shadow-xl shadow-[#0055A0]/25 border border-[#FFF8E7]/40 mb-1">
+                <GeminiSparkle size={24} />
               </div>
-            )}
-
-            {/* WINDOWS 11 TASKBAR & SYSTEM TRAY DOCK */}
-            <div className={`relative z-20 h-14 border-t backdrop-blur-2xl px-4 flex items-center justify-between transition-colors ${
-              isDarkMode ? 'border-slate-800 bg-[#090a0d]/90' : 'border-slate-200 bg-white/90'
-            }`}>
-              {/* Taskbar Pinned Apps */}
-              <div className="flex items-center gap-2">
-                {/* Windows Start */}
-                <button 
-                  onClick={() => setIsCaptureActive(true)}
-                  className="p-2 rounded-xl hover:bg-[#8CC1E9]/20 transition-all text-[#0055A0] dark:text-[#8CC1E9]"
-                  title="Screen Capture (Win+Shift+C)"
-                >
-                  <GeminiSparkle size={18} />
-                </button>
-                {/* App icons */}
-                <div className="h-4 w-px bg-slate-300 dark:bg-slate-800 mx-1" />
-                <button 
-                  onClick={() => setIsCaptureActive(prev => !prev)}
-                  className={`p-2 rounded-xl transition-all ${
-                    isCaptureActive ? 'bg-[#8CC1E9]/30 text-[#0055A0] dark:text-[#8CC1E9]' : 'hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500'
-                  }`}
-                  title="Screen Capture"
-                >
-                  <Camera size={16} />
-                </button>
-                <button 
-                  onClick={() => setIsTraceExpanded(prev => !prev)}
-                  className={`p-2 rounded-xl transition-all ${
-                    isTraceExpanded ? 'bg-[#8CC1E9]/30 text-[#0055A0] dark:text-[#8CC1E9]' : 'hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500'
-                  }`}
-                  title="ReAct Trace Panel"
-                >
-                  <Terminal size={16} />
-                </button>
+              <div className="text-sm font-semibold horizon-gradient-text">
+                Project Horizon Desktop Agent
               </div>
-
-              {/* Taskbar Center Label */}
-              <div className="text-xs font-mono text-slate-400 hidden sm:flex items-center gap-2">
+              <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
                 <span>Press</span>
-                <kbd className="px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-200">
+                <kbd className="px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-carbon-800 font-mono font-bold text-[#0055A0] dark:text-[#8CC1E9]">
                   Ctrl + Shift + C
                 </kbd>
-                <span>to capture and ground</span>
+                <span>or click below to summon chat</span>
               </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsChatVisible(true);
+                }}
+                className="mt-2 px-4 py-2 rounded-2xl text-xs font-bold bg-gradient-to-r from-[#0055A0] via-[#438BC4] to-[#8CC1E9] text-[#FFF8E7] shadow-lg shadow-[#438BC4]/30 hover:brightness-110 transition-all border border-[#FFF8E7]/30 flex items-center gap-2"
+              >
+                <GeminiSparkle size={14} />
+                <span>Summon Horizon Chat</span>
+              </button>
+            </div>
+          )}
 
-              {/* Right System Tray */}
-              <div className="relative flex items-center gap-3">
-                {/* System Tray Icon */}
+          {/* SCREEN CAPTURE OVERLAY (only rendered if browser fallback or capture hash) */}
+          {isCaptureActive && (window.location.hash.includes('capture') || typeof window === 'undefined' || !window.horizonAPI) && (
+            <div className="absolute inset-0 z-40 bg-black/60 backdrop-blur-sm p-4 flex items-center justify-center animate-fade-in">
+              <div className="w-full h-full relative">
+                <CaptureOverlayCanvas
+                  isDarkMode={isDarkMode}
+                  screenshotUrl={realScreenshotUrl}
+                  displayInfo={captureDisplayInfo}
+                  onExit={() => {
+                    setIsCaptureActive(false);
+                    if (typeof window !== 'undefined' && window.horizonAPI) window.horizonAPI.closeOverlay();
+                  }}
+                  onAttachArea={(data) => {
+                    handleAddAttachment(data);
+                    if (typeof window !== 'undefined' && window.horizonAPI) window.horizonAPI.closeOverlay();
+                  }}
+                />
                 <button
-                  onClick={() => setShowTrayPopover(prev => !prev)}
-                  className={`p-2 rounded-xl border flex items-center gap-2 transition-all ${
-                    showTrayPopover 
-                      ? 'border-[#8CC1E9] bg-[#8CC1E9]/20' 
-                      : 'border-slate-300 dark:border-slate-800 hover:border-[#8CC1E9]'
-                  }`}
-                  title="Project Horizon System Tray Menu"
+                  onClick={() => setIsCaptureActive(false)}
+                  className="absolute top-4 right-4 p-2 rounded-full bg-slate-800 text-white hover:bg-slate-700 shadow-xl border border-slate-600"
+                  title="Close Screen Capture (Esc)"
                 >
-                  <span className="w-2.5 h-2.5 rounded-full bg-gradient-to-r from-[#8CC1E9] via-[#438BC4] to-[#FFF8E7] animate-pulse" />
-                  <GeminiSparkle size={14} />
+                  <X size={16} />
                 </button>
-
-                {/* History Drawer Trigger */}
-                <button
-                  onClick={() => setShowHistoryDrawer(true)}
-                  className="p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500"
-                  title="Open Session History"
-                >
-                  <History size={16} />
-                </button>
-
-                {/* Settings Suite Trigger */}
-                <button
-                  onClick={() => setShowSettingsModal(true)}
-                  className="p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500"
-                  title="Open Preferences & Controls"
-                >
-                  <Sliders size={16} />
-                </button>
-
-                {/* System Clock */}
-                <div className="text-[11px] font-mono font-medium text-slate-500 dark:text-slate-400 pl-2">
-                  18:44
-                </div>
-
-                {/* SYSTEM TRAY POPOVER (Anchored above tray) */}
-                {showTrayPopover && (
-                  <div className="absolute bottom-16 right-0 z-50 animate-fade-in shadow-2xl">
-                    <SystemTrayPopover
-                      isDarkMode={isDarkMode}
-                      onOpenHUD={() => {
-                        setIsTraceExpanded(true);
-                        setShowTrayPopover(false);
-                      }}
-                      onOpenHistory={() => {
-                        setShowHistoryDrawer(true);
-                        setShowTrayPopover(false);
-                      }}
-                      onOpenPreferences={() => {
-                        setShowSettingsModal(true);
-                        setShowTrayPopover(false);
-                      }}
-                      onQuit={() => setShowTrayPopover(false)}
-                    />
-                  </div>
-                )}
               </div>
             </div>
-          </div>
+          )}
         </main>
       )}
 
@@ -1560,27 +1500,29 @@ export default function App() {
         </div>
       )}
 
-      {/* FOOTER */}
-      <footer className={`relative z-10 border-t py-4 px-6 text-center text-xs transition-colors duration-300 ${
-        isDarkMode ? 'border-slate-800/80 bg-[#090a0d]/85 text-slate-500' : 'border-slate-200/90 bg-white/90 text-slate-600'
-      }`}>
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <GeminiSparkle size={16} />
-            <span className="font-medium">Project Horizon OS Agent · Windows 10/11 Multimodal Architecture</span>
+      {/* FOOTER (Only displayed in Component Studio view) */}
+      {viewMode === 'studio' && (
+        <footer className={`relative z-10 border-t py-4 px-6 text-center text-xs transition-colors duration-300 ${
+          isDarkMode ? 'border-slate-800/80 bg-[#090a0d]/85 text-slate-500' : 'border-slate-200/90 bg-white/90 text-slate-600'
+        }`}>
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2.5">
+              <GeminiSparkle size={16} />
+              <span className="font-medium">Project Horizon OS Agent · Windows 10/11 Multimodal Architecture</span>
+            </div>
+            <div className="flex items-center gap-3 font-mono text-[11px] text-slate-400">
+              <button 
+                onClick={() => setShowConsentModal(true)}
+                className="hover:text-[#8CC1E9] underline cursor-pointer"
+              >
+                Privacy Agreement
+              </button>
+              <span>·</span>
+              <span>Microservice UI · Port 5173</span>
+            </div>
           </div>
-          <div className="flex items-center gap-3 font-mono text-[11px] text-slate-400">
-            <button 
-              onClick={() => setShowConsentModal(true)}
-              className="hover:text-[#8CC1E9] underline cursor-pointer"
-            >
-              Privacy Agreement
-            </button>
-            <span>·</span>
-            <span>Microservice UI · Port 5173</span>
-          </div>
-        </div>
-      </footer>
+        </footer>
+      )}
     </div>
   );
 }

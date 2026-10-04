@@ -88,7 +88,8 @@ export async function runPackagedVerification(): Promise<void> {
       path.resolve(process.cwd(), 'resources'),
     ];
     const resDir = candidateResDirs.find(d => d && fs.existsSync(path.resolve(d, 'perception-service/.venv/Scripts/python.exe'))) || process.resourcesPath || '';
-    const pyExe = path.resolve(resDir, 'perception-service/.venv/Scripts/python.exe');
+    const pywCandidate = path.resolve(resDir, 'perception-service/.venv/Scripts/pythonw.exe');
+    const pyExe = fs.existsSync(pywCandidate) ? pywCandidate : path.resolve(resDir, 'perception-service/.venv/Scripts/python.exe');
     const yoloModel = path.resolve(resDir, 'perception-service/models/yolov8n.onnx');
     const envFile = path.resolve(resDir, '.env');
 
@@ -97,7 +98,7 @@ export async function runPackagedVerification(): Promise<void> {
     const envFileExists = fs.existsSync(envFile);
     const geminiKeyConfigured = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.length > 10);
 
-    log(`  • Python perception worker (.venv/python.exe): ${pythonExeExists ? 'FOUND' : 'MISSING'} (${pyExe})`);
+    log(`  • Python perception worker (.venv): ${pythonExeExists ? 'FOUND' : 'MISSING'} (${pyExe})`);
     log(`  • YOLOv8 ONNX model (yolov8n.onnx): ${yoloModelExists ? 'FOUND' : 'MISSING'} (${yoloModel})`);
     log(`  • Packaged .env file: ${envFileExists ? 'FOUND' : 'MISSING'} (${envFile})`);
     log(`  • Gemini API Key loaded: ${geminiKeyConfigured ? 'CONFIGURED' : 'NOT SET'}`);
@@ -129,6 +130,7 @@ export async function runPackagedVerification(): Promise<void> {
           cwd: path.dirname(srvScript),
           detached: true,
           stdio: 'ignore',
+          windowsHide: true,
         });
         pyProc.unref();
 

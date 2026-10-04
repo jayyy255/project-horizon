@@ -88,7 +88,7 @@ export class ActionVerifier {
         }
 "@; [DbgEnum]::Run() | ConvertTo-Json -Compress
       `;
-      const out = execSync(`powershell -NoProfile -Command "${psScript.replace(/\n/g, ' ')}"`, { encoding: 'utf8', timeout: 3000 }).trim();
+      const out = execSync(`powershell -NoProfile -Command "${psScript.replace(/\n/g, ' ')}"`, { encoding: 'utf8', timeout: 3000, windowsHide: true }).trim();
       if (out && out !== 'null') {
         const lines = out.startsWith('[') ? JSON.parse(out) : [JSON.parse(out)];
         return lines.map((item: string) => {
@@ -112,7 +112,7 @@ export class ActionVerifier {
     try {
       const psNames = processPatterns.map(p => `'${p.replace(/\.exe$/i, '')}'`).join(',');
       const cmd = `powershell -NoProfile -Command "Get-Process -Name ${psNames} -ErrorAction SilentlyContinue | Select-Object -First 1 Id, ProcessName | ConvertTo-Json -Compress; exit 0"`;
-      const out = execSync(cmd, { encoding: 'utf8', timeout: 1500 }).trim();
+      const out = execSync(cmd, { encoding: 'utf8', timeout: 1500, windowsHide: true }).trim();
       if (out && out !== 'null' && out.length > 2) {
         const parsed = JSON.parse(out);
         return {
