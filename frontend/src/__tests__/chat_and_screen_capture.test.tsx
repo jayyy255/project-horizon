@@ -50,7 +50,7 @@ describe('Chat, Screen Capture, Multi-Attachments & Auto-Dismiss E2E Tests', () 
     );
 
     // Open capture dropdown
-    const captureBtn = screen.getByTitle(/Screen Capture: Circle an area or select full screen/i);
+    const captureBtn = screen.getByTitle(/Add files or context/i);
     fireEvent.click(captureBtn);
 
     // Click Circle Area

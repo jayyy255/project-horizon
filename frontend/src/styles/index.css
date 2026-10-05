@@ -54,21 +54,15 @@
 
 /* Multi-stop Gradient Text */
 .horizon-gradient-text {
-  background: linear-gradient(135deg, #8CC1E9 0%, #438BC4 35%, #0055A0 65%, #FFF8E7 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: #438BC4;
 }
 
 .horizon-gradient-text-light {
-  background: linear-gradient(135deg, #12284B 0%, #0055A0 45%, #438BC4 80%, #8CC1E9 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: #0055A0;
 }
 
 .horizon-gradient-text-subtle {
-  background: linear-gradient(135deg, #8CC1E9 0%, #FFF8E7 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: #8CC1E9;
 }
 
 /* Scrollbars */

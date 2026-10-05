@@ -21,11 +21,11 @@ import {
   MessageSquare,
   Trash2,
   Plus,
-  Monitor,
   Sparkles,
   Code2,
   Terminal,
-  Layers
+  Layers,
+  Menu
 } from 'lucide-react';
 import { useHorizonAgent } from './hooks/useHorizonAgent';
 
@@ -49,6 +49,7 @@ export default function App() {
   const [attachments, setAttachments] = useState<ScreenAttachment[]>([]);
   const [isChatVisible, setIsChatVisible] = useState(true);
   const [chatMessages, setChatMessages] = useState<Array<{ id: string; prompt: string; timestamp: string; attachmentsCount: number }>>([]);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [, setPastSessions] = useState<Array<{ id: number; title: string; time: string; messagesCount: number; status: string }>>([
     { id: 1, title: "Explain compile error in WebGL vertex shader", time: "12m ago", messagesCount: 2, status: "succeeded" },
     { id: 2, title: "Open target repo in VS Code and branch to feature/liquid", time: "48m ago", messagesCount: 1, status: "succeeded" }
@@ -679,15 +680,19 @@ export default function App() {
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
           {/* Logo & Identity */}
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-[#12284B] via-[#0055A0] to-[#8CC1E9] flex items-center justify-center text-[#FFF8E7] font-bold shadow-lg shadow-[#0055A0]/30 border border-[#FFF8E7]/40">
+            <button
+              onClick={() => setIsSidebarCollapsed(prev => !prev)}
+              className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors"
+              title="Toggle Sidebar"
+            >
+              <Menu size={18} />
+            </button>
+            <div className="w-9 h-9 rounded-2xl bg-[#0055A0] flex items-center justify-center text-[#FFF8E7] font-bold shadow-lg shadow-[#0055A0]/30 border border-[#FFF8E7]/40">
               <GeminiSparkle size={20} />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-extrabold text-base tracking-tight horizon-gradient-text">Project Horizon</span>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#8CC1E9]/15 text-[#0055A0] dark:text-[#8CC1E9] border border-[#8CC1E9]/40">
-                  Celestial &amp; Cosmic Suite
-                </span>
               </div>
               <div className="text-[11px] text-slate-500 dark:text-slate-400">
                 Multimodal Windows Desktop Agent
@@ -697,24 +702,10 @@ export default function App() {
 
           {/* Quick Actions */}
           <div className="flex items-center gap-2.5">
-            {/* Screen Capture Overlay Trigger */}
-            <button
-              onClick={() => setIsCaptureActive(prev => !prev)}
-              className={`px-3.5 py-2 rounded-2xl text-xs font-semibold border transition-all flex items-center gap-1.5 ${
-                isCaptureActive 
-                  ? 'bg-[#8CC1E9]/20 border-[#8CC1E9] text-[#0055A0] dark:text-[#8CC1E9]' 
-                  : 'border-slate-200 dark:border-slate-700 hover:border-[#8CC1E9] text-slate-700 dark:text-slate-300'
-              }`}
-              title="Screen Capture (Win+Shift+C)"
-            >
-              <Camera size={14} />
-              <span>{isCaptureActive ? 'Exit Capture' : 'Screen Capture'}</span>
-            </button>
-
             {/* Theme Toggle */}
             <button
               onClick={toggleTheme}
-              className={`p-2.5 rounded-2xl border transition-all flex items-center gap-2 text-xs font-semibold ${
+              className={`p-2.5 rounded-2xl border transition-all flex items-center justify-center text-xs font-semibold ${
                 isDarkMode 
                   ? 'border-slate-700 bg-carbon-800 text-slate-200 hover:border-[#8CC1E9]' 
                   : 'border-slate-200 bg-slate-100 text-slate-800 hover:border-[#438BC4]'
@@ -722,7 +713,6 @@ export default function App() {
               title="Toggle Light / Dark Mode"
             >
               {isDarkMode ? <Sun size={15} className="text-[#FFF8E7]" /> : <Moon size={15} className="text-[#12284B]" />}
-              <span>{isDarkMode ? "Light Mode" : "Dark Mode"}</span>
             </button>
           </div>
         </div>
@@ -741,6 +731,7 @@ export default function App() {
               onClick={(e) => e.stopPropagation()}
             >
               {/* LEFT SIDEBAR: Past Conversations & Memory */}
+              {!isSidebarCollapsed && (
               <aside className={`w-72 sm:w-80 border-r flex flex-col justify-between flex-shrink-0 transition-colors ${
                 isDarkMode ? 'border-slate-800/80 bg-[#0a0d13]/90' : 'border-slate-200/90 bg-white/90'
               } backdrop-blur-2xl`}>
@@ -759,7 +750,7 @@ export default function App() {
                   {/* New Chat Button */}
                   <button
                     onClick={handleNewChat}
-                    className="w-full py-2 px-3 rounded-2xl text-xs font-bold bg-gradient-to-r from-[#0055A0] via-[#438BC4] to-[#8CC1E9] text-[#FFF8E7] flex items-center justify-center gap-1.5 shadow-md shadow-[#438BC4]/25 hover:brightness-110 transition-all border border-[#FFF8E7]/30"
+                    className="w-full py-2 px-3 rounded-2xl text-xs font-bold bg-[#0055A0] text-[#FFF8E7] flex items-center justify-center gap-1.5 shadow-md shadow-[#438BC4]/25 hover:brightness-110 transition-all border border-[#FFF8E7]/30"
                   >
                     <Plus size={15} />
                     <span>New Chat</span>
@@ -894,6 +885,7 @@ export default function App() {
                   )}
                 </div>
               </aside>
+              )}
 
               {/* RIGHT MAIN CHAT AREA: Conversation Stream + Prompt Dock */}
               <section className="flex-1 flex flex-col justify-between overflow-hidden relative">
@@ -909,30 +901,10 @@ export default function App() {
                       <h2 className="text-xs sm:text-sm font-bold truncate text-slate-900 dark:text-slate-100">
                         {chatSessions.find(s => s.id === activeSessionId)?.title || 'New Conversation'}
                       </h2>
-                      <div className="text-[10px] font-mono text-emerald-500 dark:text-emerald-400 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        <span>Google Search AI Mode Active</span>
-                      </div>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={handleTriggerLasso}
-                      className="px-2.5 py-1.5 rounded-xl border border-[#8CC1E9]/40 bg-[#8CC1E9]/10 text-[#0055A0] dark:text-[#8CC1E9] text-xs font-semibold flex items-center gap-1 hover:bg-[#8CC1E9]/20 transition-all"
-                      title="Lasso screen region (Win+Shift+C)"
-                    >
-                      <Camera size={13} />
-                      <span className="hidden sm:inline">Lasso</span>
-                    </button>
-                    <button
-                      onClick={handleQuickFullScreenCapture}
-                      className="px-2.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold flex items-center gap-1 hover:border-[#8CC1E9] transition-all"
-                      title="Capture Full Desktop"
-                    >
-                      <Monitor size={13} />
-                      <span className="hidden sm:inline">Full Screen</span>
-                    </button>
                   </div>
                 </div>
 
@@ -1003,7 +975,7 @@ export default function App() {
                   {/* If Current Session Has No Messages -> Show Google Search AI Mode Hero */}
                   {(!chatSessions.find(s => s.id === activeSessionId)?.messages?.length) && (
                     <div className="my-auto py-8 flex flex-col items-center justify-center text-center animate-fade-in max-w-lg mx-auto">
-                      <div className="w-14 h-14 rounded-3xl bg-gradient-to-tr from-[#12284B] via-[#0055A0] to-[#8CC1E9] flex items-center justify-center text-[#FFF8E7] shadow-xl shadow-[#0055A0]/25 border border-[#FFF8E7]/40 mb-3">
+                      <div className="w-14 h-14 rounded-3xl bg-[#0055A0] flex items-center justify-center text-[#FFF8E7] shadow-xl shadow-[#0055A0]/25 border border-[#FFF8E7]/40 mb-3">
                         <GeminiSparkle size={28} />
                       </div>
                       <h3 className="text-base font-bold horizon-gradient-text">
@@ -1080,7 +1052,7 @@ export default function App() {
                       <div
                         className={`p-3.5 sm:p-4 rounded-3xl max-w-2xl text-xs sm:text-[13px] leading-relaxed transition-all shadow-md ${
                           msg.sender === 'user'
-                            ? 'bg-gradient-to-r from-[#0055A0] via-[#438BC4] to-[#8CC1E9] text-[#FFF8E7] rounded-br-sm border border-[#FFF8E7]/30'
+                            ? 'bg-[#0055A0] text-[#FFF8E7] rounded-br-sm border border-[#FFF8E7]/30'
                             : 'bg-white/90 dark:bg-carbon-850/90 text-slate-800 dark:text-slate-100 rounded-bl-sm border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-md'
                         }`}
                       >
@@ -1151,7 +1123,7 @@ export default function App() {
           ) : (
             /* When chat is dismissed: Prompt user to re-summon */
             <div className="mx-auto my-auto flex flex-col items-center gap-3 text-center animate-fade-in p-6">
-              <div className="w-12 h-12 rounded-3xl bg-gradient-to-tr from-[#12284B] via-[#0055A0] to-[#8CC1E9] flex items-center justify-center text-[#FFF8E7] shadow-xl shadow-[#0055A0]/25 border border-[#FFF8E7]/40 mb-1">
+              <div className="w-12 h-12 rounded-3xl bg-[#0055A0] flex items-center justify-center text-[#FFF8E7] shadow-xl shadow-[#0055A0]/25 border border-[#FFF8E7]/40 mb-1">
                 <GeminiSparkle size={24} />
               </div>
               <div className="text-sm font-semibold horizon-gradient-text">
@@ -1169,7 +1141,7 @@ export default function App() {
                   e.stopPropagation();
                   setIsChatVisible(true);
                 }}
-                className="mt-2 px-4 py-2 rounded-2xl text-xs font-bold bg-gradient-to-r from-[#0055A0] via-[#438BC4] to-[#8CC1E9] text-[#FFF8E7] shadow-lg shadow-[#438BC4]/30 hover:brightness-110 transition-all border border-[#FFF8E7]/30 flex items-center gap-2"
+                className="mt-2 px-4 py-2 rounded-2xl text-xs font-bold bg-[#0055A0] text-[#FFF8E7] shadow-lg shadow-[#438BC4]/30 hover:brightness-110 transition-all border border-[#FFF8E7]/30 flex items-center gap-2"
               >
                 <GeminiSparkle size={14} />
                 <span>Summon Horizon Chat</span>

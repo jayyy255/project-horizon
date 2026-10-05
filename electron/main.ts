@@ -68,70 +68,6 @@ let lastCapturedData: {
 } | null = null;
 
 
-let targetAppWindow: BrowserWindow | null = null;
-
-function ensureTargetAppWindow(title: string = 'Calculator'): BrowserWindow {
-  if (targetAppWindow && !targetAppWindow.isDestroyed()) {
-    return targetAppWindow;
-  }
-
-  targetAppWindow = new BrowserWindow({
-    title,
-    width: 380,
-    height: 540,
-    show: true,
-    autoHideMenuBar: true,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-    }
-  });
-
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-  <title>${title}</title>
-  <style>
-    body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif; background: #202020; color: #ffffff; margin: 0; padding: 16px; user-select: none; box-sizing: border-box; }
-    #header { font-size: 18px; font-weight: 600; margin-bottom: 8px; color: #4cc2ff; }
-    #display { font-size: 44px; text-align: right; padding: 16px 8px; font-weight: 300; min-height: 54px; background: #181818; border-radius: 6px; margin-bottom: 12px; }
-    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-    button { background: #3b3b3b; color: #ffffff; border: none; font-size: 18px; padding: 16px 0; border-radius: 4px; cursor: pointer; transition: background 0.1s; }
-    button:hover { background: #505050; }
-    button.op { background: #2d2d2d; font-size: 20px; color: #4cc2ff; }
-    button.eq { background: #0078d4; color: #ffffff; font-weight: bold; }
-  </style>
-</head>
-<body>
-  <div id="header">${title} - Standard</div>
-  <div id="display">0</div>
-  <div class="grid">
-    <button class="op" id="btn-c" onclick="document.getElementById('display').innerText = '0'">C</button>
-    <button class="op" id="btn-ce" onclick="document.getElementById('display').innerText = '0'">CE</button>
-    <button class="op" id="btn-del" onclick="document.getElementById('display').innerText = '0'">DEL</button>
-    <button class="op" id="btn-div">/</button>
-    <button id="btn-7" onclick="document.getElementById('display').innerText = (document.getElementById('display').innerText === '0' ? '' : document.getElementById('display').innerText) + '7'">7</button>
-    <button id="btn-8" onclick="document.getElementById('display').innerText = (document.getElementById('display').innerText === '0' ? '' : document.getElementById('display').innerText) + '8'">8</button>
-    <button id="btn-9" onclick="document.getElementById('display').innerText = (document.getElementById('display').innerText === '0' ? '' : document.getElementById('display').innerText) + '9'">9</button>
-    <button class="op" id="btn-mul">×</button>
-    <button id="btn-4" onclick="document.getElementById('display').innerText = (document.getElementById('display').innerText === '0' ? '' : document.getElementById('display').innerText) + '4'">4</button>
-    <button id="btn-5" onclick="document.getElementById('display').innerText = (document.getElementById('display').innerText === '0' ? '' : document.getElementById('display').innerText) + '5'">5</button>
-    <button id="btn-6" onclick="document.getElementById('display').innerText = (document.getElementById('display').innerText === '0' ? '' : document.getElementById('display').innerText) + '6'">6</button>
-    <button class="op" id="btn-sub">-</button>
-    <button id="btn-1" onclick="document.getElementById('display').innerText = (document.getElementById('display').innerText === '0' ? '' : document.getElementById('display').innerText) + '1'">1</button>
-    <button id="btn-2" onclick="document.getElementById('display').innerText = (document.getElementById('display').innerText === '0' ? '' : document.getElementById('display').innerText) + '2'">2</button>
-    <button id="btn-3" onclick="document.getElementById('display').innerText = (document.getElementById('display').innerText === '0' ? '' : document.getElementById('display').innerText) + '3'">3</button>
-    <button class="op" id="btn-add">+</button>
-    <button class="op">±</button>
-    <button id="btn-0" onclick="document.getElementById('display').innerText = (document.getElementById('display').innerText === '0' ? '' : document.getElementById('display').innerText) + '0'">0</button>
-    <button>.</button>
-    <button class="eq" id="btn-eq" onclick="document.getElementById('display').innerText = '42'">=</button>
-  </div>
-</body>
-</html>`;
-
-  targetAppWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-  return targetAppWindow;
 }
 
 /**
@@ -195,23 +131,7 @@ async function captureRealDesktop(targetWindowName?: string): Promise<{
     console.warn('[Project Horizon] desktopCapturer.getSources warning:', err);
   }
 
-  // If desktopCapturer returned empty thumbnail (e.g. WebRTC 170 session error)
-  // or a target application was requested, capture the target application window directly
-  if (!dataUrl && targetWindowName) {
-    const targetWin = ensureTargetAppWindow(targetWindowName);
-    if (targetWin && !targetWin.isDestroyed()) {
-      try {
-        const img = await targetWin.webContents.capturePage();
-        if (!img.isEmpty()) {
-          dataUrl = img.toDataURL();
-          displayLabel = targetWin.getTitle();
-          sourceId = `window:${targetWin.id}`;
-        }
-      } catch (err) {
-        console.warn('[Project Horizon] targetWin.capturePage error:', err);
-      }
-    }
-  }
+
 
   lastCapturedData = {
     dataUrl,
@@ -264,7 +184,12 @@ function createMainWindow(): BrowserWindow {
     minHeight: 600,
     center: true,
     autoHideMenuBar: true,
-    frame: true,
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#090a0d',
+      symbolColor: '#8CC1E9',
+      height: 32
+    },
     transparent: false,
     alwaysOnTop: false,
     title: 'Project Horizon — Windows Desktop Agent',
@@ -635,10 +560,7 @@ app.whenReady().then(async () => {
     return await captureRealDesktop(targetWindowName);
   });
 
-  ipcMain.handle('horizon:open-target-app', async (_event, title?: string) => {
-    const win = ensureTargetAppWindow(title || 'Calculator');
-    return { opened: true, title: win.getTitle(), id: win.id };
-  });
+
 
   ipcMain.handle('horizon:get-desktop-sources', async () => {
     const sources = await desktopCapturer.getSources({

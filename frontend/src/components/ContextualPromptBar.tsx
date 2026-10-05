@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, ArrowRight, Camera, Crop, Monitor, X } from 'lucide-react';
+import { Mic, ArrowRight, Crop, Monitor, X, Plus } from 'lucide-react';
 import { GeminiSparkle } from './GeminiSparkle';
 
 export interface ScreenAttachment {
@@ -19,7 +19,6 @@ interface ContextualPromptBarProps {
   onClearAttachments?: () => void;
   onTriggerLasso?: () => void;
   onTriggerFullScreen?: () => void;
-  hideSuggestions?: boolean;
 }
 
 export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({ 
@@ -29,8 +28,7 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
   onRemoveAttachment,
   onClearAttachments,
   onTriggerLasso,
-  onTriggerFullScreen,
-  hideSuggestions = false
+  onTriggerFullScreen
 }) => {
   const [promptText, setPromptText] = useState("");
   const [submittedMsg, setSubmittedMsg] = useState("");
@@ -147,19 +145,19 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
             className="flex-1 bg-transparent border-none outline-none text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 font-normal focus:ring-0"
           />
 
-          {/* Screen Capture Options (Circle Area / Full Screen) */}
+          {/* Add Files or Context Options */}
           <div className="relative" ref={captureMenuRef}>
             <button
               onClick={() => setShowCaptureMenu(prev => !prev)}
-              className={`p-2 rounded-xl transition-all flex items-center gap-1.5 text-xs font-semibold border ${
+              className={`px-3 p-2 rounded-xl transition-all flex items-center gap-1.5 text-xs font-semibold border ${
                 attachments.length > 0 
                   ? 'border-[#8CC1E9] bg-[#8CC1E9]/20 text-[#0055A0] dark:text-[#8CC1E9]' 
                   : 'border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-[#8CC1E9] hover:border-[#8CC1E9]'
               }`}
-              title="Screen Capture: Circle an area or select full screen"
+              title="Add files or context"
             >
-              <Camera size={14} />
-              <span className="hidden sm:inline">Screen Capture</span>
+              <Plus size={14} />
+              <span className="hidden sm:inline">Add files or context</span>
             </button>
 
             {/* Screen Capture Dropdown Menu */}
@@ -218,8 +216,8 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
             onClick={() => handleExecute()}
             className={`px-4 py-2 rounded-2xl text-xs font-semibold transition-all flex items-center gap-1.5 shadow-lg border ${
               isDarkMode 
-                ? 'bg-gradient-to-r from-[#0055A0] via-[#438BC4] to-[#8CC1E9] text-[#FFF8E7] hover:brightness-110 shadow-[0_4px_16px_rgba(67,139,196,0.35)] border-[#FFF8E7]/30' 
-                : 'bg-gradient-to-r from-[#12284B] via-[#0055A0] to-[#438BC4] text-[#FFF8E7] hover:brightness-105 shadow-[0_4px_16px_rgba(18,40,75,0.25)] border-[#8CC1E9]/50'
+                ? 'bg-[#0055A0] text-[#FFF8E7] hover:brightness-110 border-[#FFF8E7]/30' 
+                : 'bg-[#12284B] text-[#FFF8E7] hover:brightness-105 border-[#8CC1E9]/50'
             }`}
           >
             <span>Generate</span>
@@ -227,30 +225,7 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
           </button>
         </div>
 
-        {/* Prompt Suggestions */}
-        {!hideSuggestions && (
-          <div className="flex items-center gap-2 mt-2 pt-2.5 border-t border-slate-200/80 dark:border-slate-800/80 overflow-x-auto pb-0.5">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-[#0055A0] dark:text-[#8CC1E9] pl-1 flex-shrink-0">
-              Suggested:
-            </span>
-            {[
-              "open vs", 
-              "Explain this screen area", 
-              "query and prepare graph"
-            ].map((pill, idx) => (
-              <button
-                key={idx}
-                onClick={() => {
-                  setPromptText(pill);
-                  handleExecute(pill);
-                }}
-                className="px-3 py-1 rounded-full text-xs whitespace-nowrap bg-slate-100 hover:bg-[#8CC1E9]/20 text-slate-700 dark:bg-slate-800/70 dark:hover:bg-[#438BC4]/25 dark:text-slate-300 border border-slate-200 dark:border-slate-700/60 hover:border-[#8CC1E9] dark:hover:border-[#8CC1E9]/60 transition-all font-medium"
-              >
-                {pill}
-              </button>
-            ))}
-          </div>
-        )}
+
       </div>
 
       {submittedMsg && (

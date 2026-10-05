@@ -184,7 +184,6 @@ export const FloatingBarWindow: React.FC<FloatingBarWindowProps> = ({ isDarkMode
           onTriggerLasso={handleTriggerLasso}
           onTriggerFullScreen={handleQuickFullScreenCapture}
           onSubmitPrompt={handleTaskSubmit}
-          hideSuggestions={true}
         />
 
         {/* Working Status / Agent Narration Chip if Active */}
