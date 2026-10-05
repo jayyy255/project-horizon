@@ -1,0 +1,107 @@
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/Inter-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/Inter-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Silkscreen';
+  src: url('/fonts/Silkscreen-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+:root {
+  /* Colors */
+  --color-cosmic-cream: #FFF8E7;
+  --color-celestial: #8CC1E9;
+  --color-cerulean: #438BC4;
+  --color-cobalt: #0055A0;
+  --color-navy: #12284B;
+  --color-signal-cyan: #3FE0E8;
+  
+  --color-carbon-950: #07080a;
+  --color-carbon-900: #090a0d;
+  --color-carbon-850: #0e1117;
+  --color-carbon-800: #12151c;
+
+  --color-tier2-amber: #F59E0B;
+  --color-error-red: #EF4444;
+  
+  /* Defaults (Dark Mode) */
+  --bg-app: var(--color-carbon-900);
+  --text-primary: var(--color-cosmic-cream);
+  --text-secondary: rgba(255, 248, 231, 0.65);
+  
+  /* Glass Material (Dark) */
+  --glass-base-bg: rgba(9, 10, 13, 0.6);
+  --glass-base-border: rgba(140, 193, 233, 0.1);
+  --glass-base-blur: blur(24px) saturate(180%);
+  --glass-base-top-edge: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+  
+  --glass-raised-bg: rgba(14, 17, 23, 0.75);
+  --glass-raised-border: rgba(140, 193, 233, 0.15);
+  --glass-raised-blur: blur(32px) saturate(190%);
+  --glass-raised-top-edge: inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+
+  --glass-floating-bg: rgba(18, 21, 28, 0.85);
+  --glass-floating-border: rgba(140, 193, 233, 0.25);
+  --glass-floating-blur: blur(40px) saturate(200%);
+  --glass-floating-top-edge: inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+
+  /* Radii */
+  --radius-bar: 24px;
+  --radius-card: 16px;
+  --radius-button: 10px;
+  --radius-chip: 999px;
+
+  /* Typography */
+  --font-ui: 'Inter', sans-serif;
+  --font-pixel: 'Silkscreen', monospace;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Motion */
+  --motion-smooth: 160ms cubic-bezier(0.4, 0, 0.2, 1);
+  --motion-stepped: 400ms steps(4, end);
+}
+
+.light-mode {
+  --bg-app: #f8fafc;
+  --text-primary: var(--color-navy);
+  --text-secondary: rgba(18, 40, 75, 0.65);
+  
+  /* Glass Material (Light) - White-tinted glass */
+  --glass-base-bg: rgba(255, 255, 255, 0.6);
+  --glass-base-border: rgba(18, 40, 75, 0.1);
+  --glass-base-top-edge: inset 0 1px 0 0 rgba(255, 255, 255, 0.8);
+  
+  --glass-raised-bg: rgba(255, 255, 255, 0.75);
+  --glass-raised-border: rgba(18, 40, 75, 0.15);
+  --glass-raised-top-edge: inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+
+  --glass-floating-bg: rgba(255, 255, 255, 0.9);
+  --glass-floating-border: rgba(18, 40, 75, 0.2);
+  --glass-floating-top-edge: inset 0 1px 0 0 rgba(255, 255, 255, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-smooth: 0ms;
+    --motion-stepped: 0ms;
+  }
+}

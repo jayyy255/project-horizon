@@ -11,46 +11,25 @@ export default {
   theme: {
     extend: {
       colors: {
-        cosmic: {
-          cream: '#FFF8E7',
-          DEFAULT: '#FFF8E7',
-          light: '#FFFDF6',
-          dark: '#F5E8C9',
-        },
-        celestial: {
-          DEFAULT: '#8CC1E9',
-          light: '#bce0f8',
-          dark: '#6aa8d6',
-        },
-        cerulean: {
-          DEFAULT: '#438BC4',
-          light: '#62a5dc',
-          dark: '#3071a3',
-        },
-        cobalt: {
-          DEFAULT: '#0055A0',
-          light: '#0a6fc7',
-          dark: '#00407a',
-        },
-        navy: {
-          DEFAULT: '#12284B',
-          light: '#1c3d70',
-          dark: '#0c1a32',
-        },
+        cosmic: { DEFAULT: 'var(--color-cosmic-cream)' },
+        celestial: { DEFAULT: 'var(--color-celestial)' },
+        cerulean: { DEFAULT: 'var(--color-cerulean)' },
+        cobalt: { DEFAULT: 'var(--color-cobalt)' },
+        navy: { DEFAULT: 'var(--color-navy)' },
+        signal: { cyan: 'var(--color-signal-cyan)' },
+        tier2: { amber: 'var(--color-tier2-amber)' },
+        error: { red: 'var(--color-error-red)' },
         carbon: {
-          950: '#07080a',
-          900: '#090a0d',
-          850: '#0e1117',
-          800: '#12151c',
-          750: '#161922',
-          700: '#1d222e',
-          border: 'rgba(140, 193, 233, 0.16)',
-          borderActive: 'rgba(140, 193, 233, 0.5)'
+          950: 'var(--color-carbon-950)',
+          900: 'var(--color-carbon-900)',
+          850: 'var(--color-carbon-850)',
+          800: 'var(--color-carbon-800)',
         }
       },
       fontFamily: {
-        sans: ['Google Sans', 'Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Fira Code', 'Menlo', 'monospace'],
+        sans: ['Inter', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
+        pixel: ['Silkscreen', 'monospace'],
       },
       animation: {
         'shimmer': 'shimmer 3.5s infinite linear',
