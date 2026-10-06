@@ -147,9 +147,9 @@ export class ModelRouter {
   private circuitBreaker: ModelCircuitBreaker;
 
   // Default tiers
-  public static readonly LOW_COMPLEXITY_MODEL = 'gemini-2.5-flash';
-  public static readonly HIGH_COMPLEXITY_MODEL = 'gemini-3.5-flash-lite';
-  public static readonly PRO_FALLBACK_MODEL = 'gemini-2.5-pro';
+  public static readonly LOW_COMPLEXITY_MODEL = process.env.HORIZON_GEMINI_FAST_MODEL || 'gemini-3.5-flash-lite';
+  public static readonly HIGH_COMPLEXITY_MODEL = process.env.HORIZON_GEMINI_MODEL || 'gemini-3.5-flash-lite';
+  public static readonly PRO_FALLBACK_MODEL = process.env.HORIZON_GEMINI_FALLBACK_MODEL || 'gemini-3.5-flash';
   public static readonly LOCAL_MODEL = 'ollama';
 
   constructor(circuitBreaker?: ModelCircuitBreaker) {
@@ -265,6 +265,10 @@ Available tools:
 - type_text(text: string, press_enter?: boolean): Type text.
 
 Strategy:
+- Project names are resolved from actual find_path results. Never guess a project path or launch an unrelated search hit. If there is no matching project, explain that its parent folder must be added in Preferences → Project Roots.
+- Stop after two searches without a useful match, or if results repeat. Do not report a task completed just because a search ran.
+- The current build cannot physically click, type, focus windows, or send keyboard shortcuts. Explain this limitation for those requests rather than calling those tools or claiming execution.
+- When a task cannot be completed (unsupported action, missing project, or insufficient context), set error to a clear explanation instead of returning final_answer.
 - For file deletions, removals, or command executions, propose tool "launch_app" with executable_path "C:/Windows/System32/cmd.exe" and args ["/c", "del", "<file_path>"].
 - If all steps are complete or answering a direct question, return final_answer.
 - Never bypass user security or execute ungrounded destructive commands.
@@ -275,7 +279,8 @@ Respond ONLY with a valid JSON object matching:
   "narration": "User-facing concise explanation",
   "tool_name": "tool_name_here" (or null if complete),
   "args": { ... },
-  "final_answer": "Final completion answer" (or null if proposing tool)
+  "final_answer": "Final completion answer" (or null if proposing tool),
+  "error": "Explanation if the task cannot be completed" (or null)
 }`;
   }
 }

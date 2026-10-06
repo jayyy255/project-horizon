@@ -1,10 +1,13 @@
-import { ipcMain, BrowserWindow } from 'electron';
+import { ipcMain, BrowserWindow, dialog } from 'electron';
+import fs from 'fs';
 import path from 'path';
 import { SafetyGate } from './gate';
 import { ProjectIndexer } from './indexer';
 import { InputSynthesizer } from './synthesizer';
 import { AuditDatabase } from './db';
 import { AgentCoordinator, ReActSessionState } from './coordinator';
+import { agentDataPath } from './sqlite';
+import { discoverWorkspaceRoots } from './workspaces';
 
 export class AgentHost {
   private coordinator: AgentCoordinator;
@@ -13,15 +16,20 @@ export class AgentHost {
   private inputSynthesizer: InputSynthesizer;
   private auditDb: AuditDatabase;
   private mainWindow: BrowserWindow | null = null;
+  private workspaceRoots: string[] = discoverWorkspaceRoots();
 
   constructor() {
     this.safetyGate = new SafetyGate();
-    this.projectIndexer = new ProjectIndexer(path.join(process.cwd(), 'horizon_index.db'));
-    this.auditDb = new AuditDatabase(path.join(process.cwd(), 'horizon_audit.db'));
+    this.projectIndexer = new ProjectIndexer(agentDataPath('horizon_index.db'));
+    this.auditDb = new AuditDatabase(agentDataPath('horizon_audit.db'));
 
-    // Automatically index current workspace tree
     try {
-      this.projectIndexer.indexDirectory(process.cwd(), 3);
+      const roots = JSON.parse(fs.readFileSync(agentDataPath('workspace-roots.json'), 'utf8'));
+      if (Array.isArray(roots) && roots.length && roots.every(root => typeof root === 'string')) this.workspaceRoots = roots;
+    } catch {}
+    // Automatically index configured workspaces.
+    try {
+      for (const root of this.workspaceRoots) this.projectIndexer.indexDirectory(root, root === process.cwd() ? 3 : 1);
     } catch (e) {
       console.warn('[AgentHost] Project directory indexing warning:', e);
     }
@@ -57,12 +65,32 @@ export class AgentHost {
 
   private registerIpcHandlers(): void {
     if (!ipcMain?.handle) return;
+    ipcMain.handle('horizon:get-workspace-roots', () => this.workspaceRoots);
+    ipcMain.handle('horizon:add-workspace-root', async () => {
+      const selection = await dialog.showOpenDialog({ title: 'Choose a workspace to index', properties: ['openDirectory'] });
+      if (!selection.canceled && selection.filePaths[0]) {
+        const root = selection.filePaths[0];
+        if (!this.workspaceRoots.includes(root)) {
+          this.projectIndexer.indexDirectory(root, 3);
+          this.workspaceRoots.push(root);
+          fs.writeFileSync(agentDataPath('workspace-roots.json'), JSON.stringify(this.workspaceRoots));
+        }
+      }
+      return this.workspaceRoots;
+    });
+    ipcMain.handle('horizon:get-perception-health', async () => {
+      try {
+        const response = await fetch('http://127.0.0.1:4200/health', { signal: AbortSignal.timeout(5000) });
+        if (!response.ok) throw new Error('Perception service is unavailable');
+        return await response.json();
+      } catch { return { status: 'offline' }; }
+    });
     // 1. Execute task
-    ipcMain.handle('horizon:execute-task', async (_event, payload: { prompt: string; sessionId?: string; images?: string[] }) => {
+    ipcMain.handle('horizon:execute-task', async (_event, payload: { prompt: string; sessionId?: string; images?: string[]; history?: Array<{role: 'user' | 'assistant'; text: string}> }) => {
       const sessionId = payload.sessionId || `sess-${Date.now()}`;
       try {
         console.log(`[AgentHost] Executing task: "${payload.prompt}" (Session: ${sessionId}, Images: ${payload.images?.length || 0})`);
-        return await this.coordinator.executeTask(sessionId, payload.prompt, undefined, payload.images);
+        return await this.coordinator.executeTask(sessionId, payload.prompt, undefined, payload.images, payload.history);
       } catch (err: any) {
         console.error('[AgentHost] Execute task error:', err);
         throw err;

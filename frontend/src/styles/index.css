@@ -1,4 +1,5 @@
 @import url('./tokens.css');
+@import url('./workspace.css');
 
 @tailwind base;
 @tailwind components;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { RotateCcw, Lasso, Monitor, Crop, Check } from 'lucide-react';
+import { RotateCcw, Monitor, Crop, Check } from 'lucide-react';
 import { GeminiSparkle } from './GeminiSparkle';
 import { captureRealDesktop } from '../utils/capture';
 import { computeAABB, generateCatmullRomSVGPath, Point, BoundingBox } from '@shared/aabb';
@@ -41,19 +41,6 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
   const [isDrawing, setIsDrawing] = useState(false);
   const [points, setPoints] = useState<Point[]>([]);
   const [boundingBox, setBoundingBox] = useState<BoundingBox | null>(null);
-  const [hasDrawn, setHasDrawn] = useState(false);
-
-  // Initial demo coordinates if no freehand drawn yet
-  const defaultDemoPoints: Point[] = [
-    { x: 160, y: 110 },
-    { x: 340, y: 85 },
-    { x: 540, y: 120 },
-    { x: 570, y: 240 },
-    { x: 530, y: 330 },
-    { x: 360, y: 365 },
-    { x: 150, y: 330 },
-    { x: 110, y: 220 },
-  ];
 
   useEffect(() => {
     if (screenshotUrl) {
@@ -67,18 +54,9 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
     }
   }, [displayInfo]);
 
-  // Set default demo lasso on mount if in preview mode
-  useEffect(() => {
-    if (!isFullScreenOverlay && points.length === 0 && !hasDrawn) {
-      setPoints(defaultDemoPoints);
-      const initialAABB = computeAABB(defaultDemoPoints, 12);
-      setBoundingBox(initialAABB);
-    }
-  }, [isFullScreenOverlay]);
-
   // When running inside Electron, grab actual screenshot of the real desktop via desktopCapturer + getUserMedia
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.horizonAPI && !realScreenshot) {
+    if (typeof window !== 'undefined' && window.horizonAPI && !realScreenshot && !isFullScreenOverlay) {
       setIsCapturing(true);
       captureRealDesktop()
         .then((result) => {
@@ -108,6 +86,7 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
 
   // Freehand Lasso Interaction Handlers (Pointer & Mouse)
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.target instanceof Element && e.target.closest('button')) return;
     // Only left click / primary pointer
     if (e.button !== 0) return;
     const pt = getRelativeCoords(e);
@@ -120,7 +99,6 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
     }
 
     setIsDrawing(true);
-    setHasDrawn(true);
     setPoints([pt]);
     setBoundingBox(null);
   };
@@ -169,12 +147,12 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
   };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target instanceof Element && e.target.closest('button')) return;
     if (e.button !== 0 || isDrawing) return;
     const pt = getRelativeCoords(e);
     if (!pt) return;
 
     setIsDrawing(true);
-    setHasDrawn(true);
     setPoints([pt]);
     setBoundingBox(null);
   };
@@ -216,14 +194,6 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
     e.stopPropagation();
     setPoints([]);
     setBoundingBox(null);
-    setHasDrawn(false);
-  };
-
-  const handleResetDemoLasso = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setPoints(defaultDemoPoints);
-    setBoundingBox(computeAABB(defaultDemoPoints, 12));
-    setHasDrawn(true);
   };
 
   // Crops the real desktop image using an offscreen canvas at native pixel density
@@ -455,30 +425,14 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
             </>
           )}
 
-          {points.length > 0 ? (
-            <button
-              onClick={handleClearLasso}
-              className="px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 text-[#0055A0] dark:text-[#8CC1E9] hover:bg-[#8CC1E9]/15 transition-all"
-              title="Clear current selection"
-            >
-              <RotateCcw size={13} />
-              <span>Clear</span>
-            </button>
-          ) : (
-            <button
-              onClick={handleResetDemoLasso}
-              className="px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 text-[#0055A0] dark:text-[#FFF8E7] hover:bg-[#438BC4]/15 transition-all"
-              title="Draw sample selection"
-            >
-              <Lasso size={13} />
-              <span>Sample Lasso</span>
-            </button>
+          {points.length > 0 && (
+            <button onClick={handleClearLasso} className="px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 text-slate-400 hover:bg-slate-400/10" title="Clear current selection"><RotateCcw size={13} /><span>Clear</span></button>
           )}
 
           <div className="w-[1px] h-4 bg-slate-200 dark:bg-slate-700" />
 
           <button
-            onClick={onExit || (() => alert("Simulated ESC Exit"))}
+            onClick={onExit}
             className="px-2.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1 text-slate-400 hover:text-[#8CC1E9] transition-colors"
             title="Exit capture mode"
           >

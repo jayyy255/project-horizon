@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Maximize2, X } from 'lucide-react';
-import { GeminiSparkle } from './GeminiSparkle';
+import { HorizonMark } from './HorizonMark';
 import { ContextualPromptBar, ScreenAttachment } from './ContextualPromptBar';
 import { useHorizonAgent } from '../hooks/useHorizonAgent';
 
@@ -83,14 +83,14 @@ export const FloatingBarWindow: React.FC<FloatingBarWindowProps> = ({ isDarkMode
     }
   };
 
-  const handleTaskSubmit = (promptText: string, currentAttachments: ScreenAttachment[]) => {
+  const handleTaskSubmit = async (promptText: string, currentAttachments: ScreenAttachment[]) => {
     if (!promptText.trim() && currentAttachments.length === 0) return;
+    const newSessionId = `session-${Date.now()}`;
 
     // 1. Sync with shared localStorage session history store
     try {
       const stored = localStorage.getItem('horizon_chat_sessions');
       let sessions = stored ? JSON.parse(stored) : [];
-      const newSessionId = `session-${Date.now()}`;
       const now = new Date();
       const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
@@ -104,6 +104,7 @@ export const FloatingBarWindow: React.FC<FloatingBarWindowProps> = ({ isDarkMode
 
       const newSession = {
         id: newSessionId,
+        createdAt: Date.now(),
         title: promptText.slice(0, 45) || 'Screen Inspection Task',
         time: 'Just now',
         messages: [userMsg],
@@ -122,16 +123,29 @@ export const FloatingBarWindow: React.FC<FloatingBarWindowProps> = ({ isDarkMode
       .map(a => a.croppedDataUrl)
       .filter((u): u is string => Boolean(u));
 
-    dispatchTask(promptText, imageUrls);
-    setStatusMessage(`Dispatched: "${promptText.slice(0, 32)}..."`);
-    setTimeout(() => setStatusMessage(''), 4000);
-
-    // Clear prompt bar attachments
     setAttachments([]);
+    setStatusMessage('Working on your task…');
+    let result;
+    try {
+      const state = await dispatchTask(promptText, imageUrls);
+      result = { sender: 'assistant', text: state.currentNarration, status: state.status === 'error' ? 'error' : state.status === 'awaiting_tier2' ? 'working' : 'done' };
+      setStatusMessage(state.status === 'error' ? 'Task needs attention' : state.status === 'awaiting_tier2' ? 'Approval needed in workspace' : 'Task completed');
+      if (state.status === 'awaiting_tier2') handleExpandToFullApp();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Task dispatch failed';
+      result = { sender: 'assistant', text: message, status: 'error' };
+      setStatusMessage(message);
+    }
+    try {
+      const sessions = JSON.parse(localStorage.getItem('horizon_chat_sessions') || '[]');
+      localStorage.setItem('horizon_chat_sessions', JSON.stringify(sessions.map((s: any) => s.id !== newSessionId ? s : {
+        ...s, messages: [...s.messages, { id: `msg-${Date.now()}-assistant`, ...result, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }],
+      })));
+    } catch (error) { console.warn('[FloatingBar] Failed to save task result:', error); }
   };
 
   return (
-    <div className="w-full h-full p-2 flex flex-col items-center justify-center select-none bg-transparent">
+    <div className={`floating-bar ${isDarkMode ? '' : 'light-mode'} w-full h-full p-2 flex flex-col items-center justify-center select-none bg-transparent`}>
       {/* Floating Capsule Container */}
       <div className={`w-full max-w-2xl rounded-3xl p-3 border shadow-2xl backdrop-blur-2xl transition-all ${
         isDarkMode
@@ -142,10 +156,10 @@ export const FloatingBarWindow: React.FC<FloatingBarWindowProps> = ({ isDarkMode
         <div className="flex items-center justify-between pb-2 mb-1 px-2 border-b border-slate-200/50 dark:border-slate-800/60">
           <div className="flex items-center gap-2">
             <div className="w-5 h-5 rounded-lg bg-gradient-to-tr from-[#12284B] via-[#0055A0] to-[#8CC1E9] flex items-center justify-center text-[#FFF8E7] shadow-xs">
-              <GeminiSparkle size={12} />
+              <HorizonMark size={14} />
             </div>
             <span className="text-xs font-bold horizon-gradient-text tracking-tight">Project Horizon</span>
-            <span className="text-[10px] font-mono text-slate-400">· Fast Bar</span>
+            <span className="text-[10px] text-slate-400">· Desktop assistant</span>
             {statusMessage && (
               <span className="text-[10px] text-emerald-400 font-mono truncate max-w-[200px] animate-fade-in">
                 {statusMessage}
@@ -184,6 +198,7 @@ export const FloatingBarWindow: React.FC<FloatingBarWindowProps> = ({ isDarkMode
           onTriggerLasso={handleTriggerLasso}
           onTriggerFullScreen={handleQuickFullScreenCapture}
           onSubmitPrompt={handleTaskSubmit}
+          isBusy={isExecuting}
         />
 
         {/* Working Status / Agent Narration Chip if Active */}

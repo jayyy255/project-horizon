@@ -71,7 +71,7 @@
   --radius-chip: 999px;
 
   /* Typography */
-  --font-ui: 'Inter', sans-serif;
+  --font-ui: 'JetBrains Mono', monospace;
   --font-pixel: 'Silkscreen', monospace;
   --font-mono: 'JetBrains Mono', monospace;
 

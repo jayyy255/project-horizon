@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, ArrowRight, Crop, Monitor, X, Plus } from 'lucide-react';
-import { GeminiSparkle } from './GeminiSparkle';
+import { ArrowUp, Crop, Monitor, X, Plus, Loader2 } from 'lucide-react';
 
 export interface ScreenAttachment {
   id: string;
@@ -13,6 +12,7 @@ export interface ScreenAttachment {
 
 interface ContextualPromptBarProps {
   isDarkMode: boolean;
+  isBusy?: boolean;
   onSubmitPrompt?: (prompt: string, attachments: ScreenAttachment[]) => void;
   attachments?: ScreenAttachment[];
   onRemoveAttachment?: (id: string) => void;
@@ -23,6 +23,7 @@ interface ContextualPromptBarProps {
 
 export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({ 
   isDarkMode, 
+  isBusy = false,
   onSubmitPrompt,
   attachments = [],
   onRemoveAttachment,
@@ -50,12 +51,12 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
 
   const handleExecute = (txt?: string) => {
     const val = txt || promptText;
-    if (!val.trim() && attachments.length === 0) return;
+    if (isBusy || (!val.trim() && attachments.length === 0)) return;
     const finalTxt = val.trim() || (attachments.length > 0 ? "Analyze attached screen area" : "");
     if (onSubmitPrompt) {
       onSubmitPrompt(finalTxt, attachments);
     }
-    setSubmittedMsg(`Dispatched task to Gemini 2.5: "${finalTxt}"`);
+    setSubmittedMsg(`Task submitted to Horizon: "${finalTxt}"`);
     setTimeout(() => setSubmittedMsg(""), 3500);
     setPromptText("");
   };
@@ -63,7 +64,7 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
   return (
     <div 
       id="horizon-chat-container" 
-      className="w-full max-w-2xl flex flex-col items-center gap-2.5"
+      className="prompt-container w-full flex flex-col items-center gap-2.5"
       onClick={(e) => e.stopPropagation()}
     >
       {/* Attached Screen Captures Row (Supports Multiple Attachments) */}
@@ -121,30 +122,31 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
 
       {/* Main Glassmorphic Chat Bar */}
       <div 
-        className={`w-full p-2.5 rounded-3xl border shadow-2xl transition-all relative ${
+        className={`prompt-surface w-full transition-all relative ${
           isDarkMode ? 'liquid-glass-dark text-slate-100 border-[#8CC1E9]/40' : 'liquid-glass-light text-slate-900 border-[#8CC1E9]/45'
         }`}
       >
-        <div className="flex items-center gap-2">
-          {/* Gemini Sparkle */}
-          <div className="p-2 flex-shrink-0 animate-pulse">
-            <GeminiSparkle size={22} />
-          </div>
-
+        <div className="prompt-layout">
           {/* Main Prompt Input */}
-          <input
-            type="text"
+          <textarea
+            rows={2}
+            aria-label="Message Horizon"
             value={promptText}
             onChange={(e) => setPromptText(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleExecute()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                handleExecute();
+              }
+            }}
             placeholder={
               attachments.length > 0 
                 ? `Ask Gemini about ${attachments.length === 1 ? 'this screen attachment' : `${attachments.length} attachments`}...` 
                 : "Ask Gemini to inspect, refactor, or automate..."
             }
-            className="flex-1 bg-transparent border-none outline-none text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 font-normal focus:ring-0"
+            className="prompt-input"
           />
-
+          <div className="prompt-toolbar">
           {/* Add Files or Context Options */}
           <div className="relative" ref={captureMenuRef}>
             <button
@@ -155,9 +157,11 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
                   : 'border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-[#8CC1E9] hover:border-[#8CC1E9]'
               }`}
               title="Add files or context"
+              aria-label="Add screen context"
+              aria-expanded={showCaptureMenu}
             >
               <Plus size={14} />
-              <span className="hidden sm:inline">Add files or context</span>
+              <span>Add screen context</span>
             </button>
 
             {/* Screen Capture Dropdown Menu */}
@@ -179,7 +183,7 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
                     <Crop size={14} className="text-[#438BC4]" />
                     <div className="flex flex-col">
                       <span className="font-semibold">Circle Area</span>
-                      <span className="text-[10px] text-slate-400">Select bounding box / lasso</span>
+                      <span className="text-[10px] text-slate-400">Select a region of your screen</span>
                     </div>
                   </button>
                 )}
@@ -202,35 +206,27 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
             )}
           </div>
 
-          {/* Dictate / Voice Input */}
-          <button 
-            onClick={() => alert("Voice input active: Gemini listening...")}
-            className="p-2 text-slate-400 hover:text-[#8CC1E9] transition-colors" 
-            title="Dictate with voice"
-          >
-            <Mic size={17} />
-          </button>
+          <span className="prompt-model">Gemini</span>
 
           {/* Send / Generate Prompt */}
           <button
             onClick={() => handleExecute()}
-            className={`px-4 py-2 rounded-2xl text-xs font-semibold transition-all flex items-center gap-1.5 shadow-lg border ${
-              isDarkMode 
-                ? 'bg-[#0055A0] text-[#FFF8E7] hover:brightness-110 border-[#FFF8E7]/30' 
-                : 'bg-[#12284B] text-[#FFF8E7] hover:brightness-105 border-[#8CC1E9]/50'
-            }`}
+            disabled={isBusy || (!promptText.trim() && attachments.length === 0)}
+            className="prompt-send"
+            aria-label="Generate"
+            title={isBusy ? 'Working on your task' : 'Send message'}
           >
-            <span>Generate</span>
-            <ArrowRight size={14} />
+            <span className="sr-only">Generate</span>
+            {isBusy ? <Loader2 size={17} className="animate-spin" /> : <ArrowUp size={18} />}
           </button>
+          </div>
         </div>
 
 
       </div>
 
       {submittedMsg && (
-        <div className="text-xs font-medium text-[#0055A0] dark:text-[#8CC1E9] flex items-center gap-2 animate-bounce">
-          <GeminiSparkle size={14} />
+        <div role="status" className="sr-only">
           <span>{submittedMsg}</span>
         </div>
       )}

@@ -1,6 +1,6 @@
 {
   "name": "project-horizon",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "System-Wide Multimodal Desktop & GUI Agent for Windows",
   "main": "dist-electron/electron/main.js",
   "scripts": {
@@ -16,8 +16,9 @@
     "build:all": "npm run build:frontend && npm run build:agent && npm run build:electron",
     "test:frontend": "npm run test --prefix frontend",
     "test:agent": "npm run test --prefix backend/agent-service",
+    "test:desktop:commands": "npm run build:electron && electron tests/command-regressions.electron.cjs",
     "test:perception": "powershell -Command \"cd backend/perception-service; .venv/Scripts/pytest -v\"",
-    "test:all": "npm run test:frontend && npm run test:agent && npm run test:perception",
+    "test:all": "npm run test:frontend && npm run test:agent && npm run test:desktop:commands && npm run test:perception",
     "test:capture:pixels": "electron scripts/verify_real_desktop_pixels.js",
     "test:capture:latency": "electron scripts/benchmark_capture_latency.js",
     "test:capture:multimonitor": "electron scripts/verify_multimonitor.js",
@@ -27,8 +28,9 @@
     "test:gemini": "npm run build:electron && electron scripts/test_gemini_react_integration.js",
     "test:e2e": "npm run build:electron && electron scripts/verify_reconnected_e2e.js",
     "build:desktop": "npm run build:frontend && npm run build:electron",
-    "package:dir": "npm run build:desktop && electron-builder --dir",
-    "package:win": "npm run build:desktop && electron-builder --win",
+    "prepare:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File packaging/prepare-runtime.ps1",
+    "package:dir": "npm run build:desktop && npm run prepare:installer && electron-builder --dir --publish never",
+    "package:win": "npm run build:desktop && npm run prepare:installer && electron-builder --win --publish never",
     "security-check": "npm audit && npm audit --prefix frontend && npm audit --prefix backend/agent-service"
   },
 

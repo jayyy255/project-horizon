@@ -26,7 +26,8 @@ describe('Project Horizon Isolated Component Specifications (Dev Gallery Suite)'
 
   it('renders HUDCollapsedChip in standby state', () => {
     render(<HUDCollapsedChip isDarkMode={true} isExpanded={false} onToggleLogs={() => {}} />);
-    expect(screen.getByText(/GEMINI THINKING/i)).toBeDefined();
+    expect(screen.getByText('Ready')).toBeDefined();
+    expect(screen.getByText('No active task')).toBeDefined();
   });
 
   it('renders ReActTracePanel with thought and observation steps', () => {
@@ -59,7 +60,8 @@ describe('Project Horizon Isolated Component Specifications (Dev Gallery Suite)'
 
   it('renders FirstRunConsentModal with boundary disclosures and authorization checkbox', () => {
     render(<FirstRunConsentModal isDarkMode={true} onConsentGiven={() => {}} />);
-    expect(screen.getByText('Google Gemini Multimodal Authorization')).toBeDefined();
+    expect(screen.getByRole('dialog')).toBeDefined();
+    expect(screen.getByText('You choose what to share')).toBeDefined();
     expect(screen.getByRole('checkbox')).toBeDefined();
   });
 
@@ -73,7 +75,7 @@ describe('Project Horizon Isolated Component Specifications (Dev Gallery Suite)'
   it('renders SessionHistoryDrawer with query filter and export options', () => {
     render(<SessionHistoryDrawer isDarkMode={true} />);
     expect(screen.getByText('Session Memory & Follow-Up')).toBeDefined();
-    expect(screen.getByText('Explain compile error in WebGL vertex shader')).toBeDefined();
+    expect(screen.getByText('Your conversations will appear here.')).toBeDefined();
   });
 
   it('renders StateMachineTokenKit with interactive token kit', () => {

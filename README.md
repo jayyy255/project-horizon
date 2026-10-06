@@ -19,7 +19,7 @@
 
 ## 📖 Overview
 
-**Project Horizon** is an academic-grade, multimodal Windows desktop application that brings the speed and intuition of **Google Search AI Mode** and **Circle-to-Search** directly to the Windows operating system. 
+**Project Horizon** is a multimodal Windows desktop assistant for asking about selected screen context, finding projects, and launching applications. Version 1.1.0 uses a glass interface, JetBrains Mono, the Horizon app icon, and restrained pixel accents.
 
 When launched, Project Horizon automatically registers the global desktop shortcut (`Win + Shift + C` or `Ctrl + Shift + C`) upon your approval. From that point on, Horizon acts as a dedicated desktop AI chatbot app where you can review all past conversations, continue existing threads, and circle or inspect any open application, document, or screen region.
 
@@ -27,9 +27,11 @@ When launched, Project Horizon automatically registers the global desktop shortc
 1. **Conversational AI Mode Chatbot**: Native, edge-to-edge desktop cockpit modeled after the Google Search AI Mode experience. View all past chat threads in the left sidebar, seamlessly continue previous discussions, and initiate new multimodal investigations with full context memory.
 2. **One-Click Hotkey Approval (`Win + Shift + C`)**: Prompts on first startup to automatically bind the global shortcut. Press the hotkey from any game, browser, IDE, or document to instantly freeze the desktop and lasso any UI element.
 3. **Air-Gapped Local Perception (Set-of-Marks)**: Runs an on-device YOLOv8n ONNX neural network and RapidOCR engine on `http://127.0.0.1:4200` using a silent, windowless background worker (`pythonw.exe` with zero console popups). Detects interactive buttons, input fields, containers, and text tags (`[0]`, `[1]`, `[2]...`) with zero screen data egress.
-4. **Reflexive Intent Matching (< 1ms)**: Standard desktop tasks (launching Calculator, focusing VS Code, toggling system controls) match instantaneously with 0 tokens and zero cloud roundtrips.
+4. **Direct Desktop Commands**: Simple app launches and screen capture use deterministic intent matching. Project-opening requests resolve an indexed folder and pass it directly to VS Code, like Explorer's Open with Code. Missing or ambiguous projects return clear errors.
 5. **Two-Tier Human-in-the-Loop Safety Gate**: Read-only actions run autonomously (Tier 1), while destructive operations (file deletions, disk modifications, arbitrary shell executions) unconditionally pause for explicit human approval via a secure modal (Tier 2).
-6. **Encrypted Local Memory**: All conversation histories, system knowledge graphs, full-text file indices, and verified action plans are stored 100% on-device in AES-256-GCM encrypted local SQLite databases.
+6. **Local Storage**: Conversations, audit records and workspace indexes remain on the device. Cached action plans use AES-256-GCM; saved Gemini keys use Windows-backed Electron credential encryption. Prompts and submitted image context are sent to Gemini for cloud reasoning.
+
+Physical typing, clicks, window focus and clipboard shortcuts are not connected to a native input adapter in this release. Complex requests do not resume planning after approval; Horizon reports the remaining task as unverified. Current-workspace queries cannot infer a full folder path from window titles alone.
 
 ---
 
@@ -39,15 +41,18 @@ Project Horizon is distributed as a packaged desktop application for 64-bit Wind
 
 ### 1. Download the Desktop Package
 Download the latest Windows installer or standalone package from the [GitHub Releases](https://github.com/jayyy255/project-horizon/releases) page:
-- **Installer**: `Project-Horizon-Setup.exe` (recommended for standard installation and desktop shortcut creation)
-- **Portable**: `Project-Horizon-win-x64.zip` (extract and run `Project Horizon.exe` directly)
+- **Installer**: `Project-Horizon-Setup-1.1.0-x64.exe` with a per-user setup wizard, installation-directory choice, desktop shortcut and Start menu entry.
+- Python, perception models and the native window verifier are bundled. End users do not need Node.js, Python, Miniconda or a source checkout.
+- The installer contains no developer `.env` file or API key. It is currently unsigned.
 
 ### 2. Launch & Approve Hotkey
-1. Run the downloaded `Project-Horizon-Setup.exe`.
+1. Run the downloaded `Project-Horizon-Setup-1.1.0-x64.exe`.
 2. On first launch, Horizon will prompt for your authorization to register the global desktop shortcut:
-   - **Default Hotkey**: `Win + Shift + C` (or `Ctrl + Shift + C`)
+   - **Default Hotkey**: `Win + Shift + C`; Preferences can switch to `Ctrl + Space`.
    - **Privacy Boundary**: Horizon never passively records your screen; screen buffers are captured exclusively when you press the hotkey or select a region.
-3. Click **"Enable Agent"** (or Approve Hotkey). The shortcut is automatically registered with the Windows operating system.
+3. Read the first-run disclosures, select the consent checkbox, and click **Continue**. The shortcut registers after that choice.
+4. Open **Preferences → Inference Engine**, paste your own [Gemini API key](https://aistudio.google.com/apikey), and click **Save key**. The key is encrypted for your Windows account and can be replaced or removed there.
+5. If your projects are outside the discovered locations, add their parent folder in **Preferences → Project Roots**.
 
 ### 3. Using Horizon as Your AI Chatbot
 - **View Past Chats**: All prior questions, code explanations, and automation summaries appear in the **Past Chats** sidebar with timestamps, turn counts, and crop thumbnails.

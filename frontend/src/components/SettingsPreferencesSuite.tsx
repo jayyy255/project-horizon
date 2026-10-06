@@ -1,228 +1,57 @@
-import React, { useState } from 'react';
-import { 
-  Sliders, 
-  Keyboard, 
-  FolderGit2, 
-  Cpu, 
-  Clock, 
-  LayoutGrid, 
-  Command, 
-  Plus, 
-  Folder 
-} from 'lucide-react';
-import { GeminiSparkle } from './GeminiSparkle';
-
-interface SettingsPreferencesSuiteProps {
-  isDarkMode: boolean;
-  onSaveSettings?: (settings: Record<string, unknown>) => void;
+import { useEffect, useState } from 'react';
+import { Sliders, Keyboard, FolderGit2, Cpu, Folder, Plus } from 'lucide-react';
+interface SettingsPreferencesSuiteProps { isDarkMode: boolean; onSaveSettings?: (settings: Record<string, unknown>) => void; }
+export function SettingsPreferencesSuite({ isDarkMode }: SettingsPreferencesSuiteProps) {
+  const [activeTab, setActiveTab] = useState('hotkeys');
+  const [hotkey, setHotkey] = useState(() => localStorage.getItem('horizon_hotkey') || 'Win + Shift + C');
+  const [roots, setRoots] = useState<string[]>([]);
+  const [health, setHealth] = useState<{status:string;backend?:string}>({status:'checking'});
+  const [error, setError] = useState('');
+  const [geminiConfigured, setGeminiConfigured] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [savingKey, setSavingKey] = useState(false);
+  const [keyMessage, setKeyMessage] = useState('');
+  useEffect(() => {
+    window.horizonAPI?.getWorkspaceRoots?.().then(setRoots).catch(() => setError('Could not load workspaces.'));
+    if (window.horizonAPI?.getPerceptionHealth) window.horizonAPI.getPerceptionHealth().then(setHealth).catch(() => setHealth({status:'offline'}));
+    else setHealth({status:'offline'});
+    window.horizonAPI?.getGeminiStatus?.().then(status => setGeminiConfigured(status.configured)).catch(() => setError('Could not load Gemini settings.'));
+  }, []);
+  const saveKey = async (value: string) => {
+    setSavingKey(true); setError(''); setKeyMessage('');
+    try {
+      if (!window.horizonAPI?.saveGeminiKey) throw new Error('Key setup requires the desktop app.');
+      const status = await window.horizonAPI.saveGeminiKey(value);
+      setGeminiConfigured(status.configured); setApiKey('');
+      setKeyMessage(status.configured ? 'Key saved. Gemini is ready for your next request.' : 'Saved key removed.');
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not save the key.'); }
+    finally { setSavingKey(false); }
+  };
+  const cycleHotkey = async () => {
+    const next = hotkey === 'Win + Shift + C' ? 'Ctrl + Space' : 'Win + Shift + C';
+    try {
+      const result = await window.horizonAPI?.approveHotkey?.(next === 'Ctrl + Space' ? 'CommandOrControl+Space' : 'Super+Shift+C');
+      if (result && !result.success) throw new Error(result.error || 'Shortcut is unavailable.');
+      localStorage.setItem('horizon_hotkey', next); setHotkey(next);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not register shortcut.'); }
+  };
+  return <div className={`preferences-panel w-[720px] max-w-full h-[490px] flex flex-col overflow-hidden rounded-2xl border ${isDarkMode ? 'liquid-glass-dark text-slate-100' : 'liquid-glass-light text-slate-900'}`}>
+    <div className="px-6 py-5 border-b border-slate-500/15 flex items-center gap-3"><Sliders size={19} className="text-slate-400" /><div><h3 className="text-sm font-medium">Preferences &amp; Controls</h3><p className="text-[11px] text-slate-400 mt-1">Make Horizon fit your desktop.</p></div></div>
+    <div className="flex flex-1 min-h-0"><nav className="w-48 p-3 border-r border-slate-500/15 space-y-1">
+      {[{id:'hotkeys',label:'Hotkey Trigger',Icon:Keyboard},{id:'roots',label:'Project Roots',Icon:FolderGit2},{id:'backend',label:'Inference Engine',Icon:Cpu}].map(({id,label,Icon}) => <button key={id} onClick={() => setActiveTab(id)} className={`flex items-center gap-2.5 w-full px-3 py-3 rounded-lg text-xs text-left ${activeTab === id ? 'bg-slate-400/10' : 'text-slate-400 hover:bg-slate-400/5'}`}><Icon size={15} />{label}</button>)}
+    </nav><div className="flex-1 min-w-0 p-6 overflow-auto">
+      {activeTab === 'hotkeys' && <div><h4 className="text-sm font-medium">Screen Capture Hotkey</h4><p className="text-xs text-slate-400 mt-2 leading-relaxed">Summon the floating bar from anywhere. Add screen context there or expand into your workspace.</p><div className="flex items-center gap-3 mt-6"><kbd className="px-4 py-3 rounded-xl border border-slate-500/20 text-xs">{hotkey}</kbd><button className="px-3 py-2 text-xs text-slate-400 hover:text-slate-200" onClick={cycleHotkey}>Cycle Hotkey</button></div></div>}
+      {activeTab === 'roots' && <div><div className="flex items-center justify-between"><h4 className="text-sm font-medium">Indexed Project Roots</h4><button disabled={!window.horizonAPI?.addWorkspaceRoot} onClick={async () => { try { const next = await window.horizonAPI?.addWorkspaceRoot?.(); if (next) setRoots(next); } catch { setError('Could not index the selected folder.'); } }} className="flex items-center gap-1.5 text-xs text-slate-400 disabled:opacity-40"><Plus size={14} />Add Path</button></div><p className="text-xs text-slate-400 my-3 leading-relaxed">Choose the folders Horizon can search for projects and workspaces.</p>{roots.length === 0 && <p className="text-xs text-slate-400 mt-6">No workspace folders available.</p>}{roots.map(root => <div key={root} className="flex items-center gap-2 p-3 mt-2 rounded-xl border border-slate-500/15 text-[11px] font-mono break-all"><Folder size={15} className="flex-shrink-0 text-slate-400" />{root}</div>)}</div>}
+      {activeTab === 'backend' && <div><h4 className="text-sm font-medium">Inference Engine</h4><p className="text-xs text-slate-400 mt-2 leading-relaxed">Screen elements are detected locally. Gemini reasons about your task and proposes actions.</p>
+        <form className="mt-5" onSubmit={e => { e.preventDefault(); void saveKey(apiKey); }}>
+          <div className="flex justify-between items-center mb-2"><label htmlFor="gemini-api-key" className="text-xs">Gemini API key</label><span className="text-[11px] text-slate-400">{geminiConfigured ? 'Configured' : 'Setup needed'}</span></div>
+          <input id="gemini-api-key" type="password" autoComplete="off" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={geminiConfigured ? 'Enter a replacement key' : 'Paste your Gemini API key'} className="w-full rounded-lg border border-slate-500/20 bg-transparent px-3 py-2 text-xs outline-none focus:border-sky-400/50" />
+          <div className="flex gap-3 mt-3"><button type="submit" disabled={savingKey || !apiKey.trim()} className="rounded-lg border border-slate-500/20 px-3 py-2 text-xs disabled:opacity-40">{savingKey ? 'Saving…' : 'Save key'}</button>{geminiConfigured && <button type="button" disabled={savingKey} onClick={() => void saveKey('')} className="text-xs text-slate-400">Remove key</button>}</div>
+          <p className="text-[11px] text-slate-400 mt-3 leading-relaxed">Your key is encrypted for this Windows account. Screen context is shared with Gemini when you submit it.</p>
+          {keyMessage && <p role="status" className="text-xs text-sky-400 mt-3">{keyMessage}</p>}
+        </form>
+        <div className="p-4 border border-slate-500/15 rounded-xl mt-5"><div className="flex justify-between text-xs"><span>Local screen perception</span><span>{health.status === 'ok' ? 'Connected' : health.status === 'checking' ? 'Checking…' : 'Offline'}</span></div>{health.backend && <p className="text-[11px] text-slate-400 mt-3">{health.backend}</p>}</div><p className="text-[11px] text-slate-400 mt-4">Sensitive actions always pause for your review.</p></div>}
+      {error && <p role="alert" className="text-xs text-rose-400 mt-4">{error}</p>}
+    </div></div>
+  </div>;
 }
-
-export const SettingsPreferencesSuite: React.FC<SettingsPreferencesSuiteProps> = ({ 
-  isDarkMode 
-}) => {
-  const [activeTab, setActiveTab] = useState("hotkeys");
-  const [hotkey, setHotkey] = useState("Win + Shift + C");
-  const [backend, setBackend] = useState("gpu");
-  const [retention, setRetention] = useState("7d");
-  const [dockAnchor, setDockAnchor] = useState("top-right");
-  const [projectRoots, setProjectRoots] = useState([
-    { path: "~/Projects/horizon-agent", badge: "Primary" },
-    { path: "~/Documents/ClientDesigns", badge: "Assets" }
-  ]);
-
-  return (
-    <div 
-      className={`w-[720px] max-w-full h-[490px] rounded-3xl border shadow-2xl flex flex-col overflow-hidden transition-all ${
-        isDarkMode ? 'liquid-glass-dark text-slate-100 border-[#8CC1E9]/35' : 'liquid-glass-light text-slate-900 border-[#8CC1E9]/35'
-      }`}
-    >
-      {/* Header */}
-      <div className="p-4 sm:px-6 border-b border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#12284B] to-[#438BC4] text-[#FFF8E7] border border-[#8CC1E9]/40 flex items-center justify-center shadow-sm">
-            <Sliders size={16} />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold tracking-tight">Gemini Agent Preferences &amp; Controls</h3>
-            <p className="text-[11px] text-slate-400">Desktop Orchestration Settings</p>
-          </div>
-        </div>
-        <span className="px-3 py-1 rounded-full font-mono text-[10px] bg-[#8CC1E9]/15 text-[#0055A0] dark:text-[#8CC1E9] border border-[#8CC1E9]/35">
-          CONFIG_SYNCED
-        </span>
-      </div>
-
-      {/* Body */}
-      <div className="flex-1 flex min-h-0">
-        {/* Sidebar Tabs */}
-        <div className="w-52 border-r border-slate-200/80 dark:border-slate-800/80 p-3 space-y-1 bg-slate-50/50 dark:bg-carbon-900/50">
-          {[
-            { id: "hotkeys", label: "Hotkey Trigger", icon: Keyboard },
-            { id: "roots", label: "Project Roots", icon: FolderGit2 },
-            { id: "backend", label: "Inference Engine", icon: Cpu },
-            { id: "retention", label: "Retention Window", icon: Clock },
-            { id: "docking", label: "HUD Dock Position", icon: LayoutGrid },
-          ].map(t => {
-            const IconComponent = t.icon;
-            return (
-              <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id)}
-                className={`w-full px-3 py-2.5 rounded-2xl text-xs font-medium flex items-center gap-2.5 text-left transition-all ${
-                  activeTab === t.id
-                    ? 'bg-[#8CC1E9]/20 text-[#0055A0] dark:text-[#8CC1E9] border border-[#8CC1E9]/40 font-semibold shadow-sm'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-[#0055A0] dark:hover:text-[#8CC1E9] hover:bg-slate-200/50 dark:hover:bg-slate-800/50'
-                }`}
-              >
-                <IconComponent size={15} />
-                <span>{t.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Content Pane */}
-        <div className="flex-1 p-5 sm:p-6 overflow-y-auto space-y-4">
-          {activeTab === 'hotkeys' && (
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider horizon-gradient-text">Screen Capture Hotkey</h4>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Combination that activates the freeze overlay and Gemini lasso tool.</p>
-              <div className="flex items-center gap-3 pt-2">
-                <div className="px-4 py-2.5 rounded-2xl font-mono text-sm border bg-slate-50 dark:bg-carbon-850 border-slate-200 dark:border-slate-700 text-[#0f172a] dark:text-[#FFF8E7] flex items-center gap-2 shadow-sm">
-                  <Command size={15} />
-                  <span className="font-bold">{hotkey}</span>
-                </div>
-                <button 
-                  onClick={() => setHotkey(hotkey === "Win + Shift + C" ? "Ctrl + Space" : "Win + Shift + C")}
-                  className="px-3.5 py-2.5 rounded-2xl text-xs border border-slate-200 dark:border-slate-700 hover:border-[#8CC1E9] text-slate-700 dark:text-slate-300 hover:text-[#0055A0] dark:hover:text-[#8CC1E9] transition-colors"
-                >
-                  Cycle Hotkey
-                </button>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'roots' && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold uppercase tracking-wider horizon-gradient-text">Indexed Project Roots</h4>
-                <button 
-                  onClick={() => {
-                    const path = prompt("Enter directory path:", "~/workspace/glsl-engine");
-                    if (path) setProjectRoots(prev => [...prev, { path, badge: "Custom" }]);
-                  }}
-                  className="px-3 py-1.5 rounded-full text-xs font-bold bg-gradient-to-r from-[#0055A0] via-[#438BC4] to-[#8CC1E9] text-[#FFF8E7] border border-[#FFF8E7]/30 flex items-center gap-1.5 shadow-md shadow-[#438BC4]/25"
-                >
-                  <Plus size={13} />
-                  <span>Add Path</span>
-                </button>
-              </div>
-              <div className="space-y-2">
-                {projectRoots.map((root, i) => (
-                  <div key={i} className="p-2.5 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-carbon-850 text-xs font-mono">
-                    <div className="flex items-center gap-2 truncate">
-                      <Folder size={15} className="text-[#438BC4]" />
-                      <span className="truncate">{root.path}</span>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] bg-[#8CC1E9]/15 text-[#0055A0] dark:text-[#8CC1E9] border border-[#8CC1E9]/35">
-                      {root.badge}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'backend' && (
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider horizon-gradient-text">Inference Engine Hardware</h4>
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                <div 
-                  onClick={() => setBackend("gpu")}
-                  className={`p-4 rounded-2xl border cursor-pointer transition-all ${
-                    backend === 'gpu' 
-                      ? 'border-[#8CC1E9] bg-[#8CC1E9]/15 shadow-[0_0_20px_rgba(67,139,196,0.3)]' 
-                      : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-carbon-850 hover:border-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-bold text-xs text-[#0055A0] dark:text-[#8CC1E9] flex items-center gap-1.5">
-                      <GeminiSparkle size={12} />
-                      <span>DirectML / GPU</span>
-                    </span>
-                    <span className="font-mono text-[10px] text-[#438BC4]">~650ms</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Accelerated Gemini Vision tensor execution for instant bounding regressions.</p>
-                </div>
-
-                <div 
-                  onClick={() => setBackend("cpu")}
-                  className={`p-4 rounded-2xl border cursor-pointer transition-all ${
-                    backend === 'cpu' 
-                      ? 'border-[#8CC1E9] bg-[#8CC1E9]/15 shadow-[0_0_20px_rgba(67,139,196,0.3)]' 
-                      : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-carbon-850 hover:border-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-bold text-xs text-slate-700 dark:text-slate-300">CPU Fallback</span>
-                    <span className="font-mono text-[10px] text-slate-400">~1200ms</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Preserves discrete GPU memory bandwidth for 3D graphics and games.</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'retention' && (
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider horizon-gradient-text">Screenshot Retention Window</h4>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Automatic pruning period for encrypted local frame buffers.</p>
-              <div className="flex items-center gap-2 pt-2">
-                {["24h", "7d", "30d", "Forever"].map(val => (
-                  <button
-                    key={val}
-                    onClick={() => setRetention(val)}
-                    className={`flex-1 py-2 rounded-2xl text-xs font-mono font-medium border transition-all ${
-                      retention === val
-                        ? 'bg-gradient-to-r from-[#0055A0] via-[#438BC4] to-[#8CC1E9] text-[#FFF8E7] font-bold border-[#FFF8E7]/40 shadow-md shadow-[#438BC4]/30'
-                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-carbon-850'
-                    }`}
-                  >
-                    {val}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'docking' && (
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider horizon-gradient-text">HUD Quadrant Docking</h4>
-              <div className="grid grid-cols-2 gap-2.5 max-w-xs pt-1">
-                {[
-                  { id: "top-left", label: "Top-Left" },
-                  { id: "top-right", label: "Top-Right" },
-                  { id: "bottom-left", label: "Bottom-Left" },
-                  { id: "bottom-right", label: "Bottom-Right" },
-                ].map(q => (
-                  <button
-                    key={q.id}
-                    onClick={() => setDockAnchor(q.id)}
-                    className={`p-3 rounded-2xl border text-xs font-medium flex items-center justify-center gap-2 transition-all ${
-                      dockAnchor === q.id 
-                        ? 'bg-[#8CC1E9]/20 text-[#0055A0] dark:text-[#8CC1E9] border-[#8CC1E9] font-bold' 
-                        : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 bg-slate-50 dark:bg-carbon-850'
-                    }`}
-                  >
-                    <div className={`w-2 h-2 rounded-full ${dockAnchor === q.id ? 'bg-[#438BC4]' : 'bg-slate-400'}`} />
-                    <span>{q.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};

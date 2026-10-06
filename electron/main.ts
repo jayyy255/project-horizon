@@ -14,6 +14,7 @@ import path from 'path';
 import { spawn } from 'child_process';
 import { AgentHost } from './agent';
 import { runPackagedVerification } from './packagedVerification';
+import { loadGeminiKey, getGeminiStatus, saveGeminiKey } from './settings';
 
 function loadEnvFile(envPath: string) {
   try {
@@ -38,10 +39,9 @@ function loadEnvFile(envPath: string) {
 }
 
 // Load .env candidates without requiring external npm packages
-const envCandidates = [
+const envCandidates = app.isPackaged ? [] : [
   path.resolve(process.cwd(), '.env'),
   path.resolve(__dirname, '../../.env'),
-  path.resolve(process.resourcesPath || '', '.env'),
 ];
 for (const p of envCandidates) {
   loadEnvFile(p);
@@ -68,7 +68,6 @@ let lastCapturedData: {
 } | null = null;
 
 
-}
 
 /**
  * Captures real desktop pixels using Electron's desktopCapturer API.
@@ -186,9 +185,9 @@ function createMainWindow(): BrowserWindow {
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      color: '#090a0d',
+      color: '#00000000',
       symbolColor: '#8CC1E9',
-      height: 32
+      height: 54
     },
     transparent: false,
     alwaysOnTop: false,
@@ -384,7 +383,8 @@ function setupSystemTray(): void {
     ])
   );
 
-  tray = new Tray(iconCanvas);
+  const brandIcon = nativeImage.createFromPath(path.join(app.getAppPath(), 'assets', 'icon.png'));
+  tray = new Tray(brandIcon.isEmpty() ? iconCanvas : brandIcon.resize({ width: 16, height: 16 }));
   tray.setToolTip('Project Horizon — Windows Desktop Agent');
 
   const contextMenu = Menu.buildFromTemplate([
@@ -437,6 +437,8 @@ function spawnPerceptionServiceIfNeeded(): void {
     })
     .catch(() => {
       const candidates = [
+        path.resolve(process.resourcesPath || '', 'perception-service/runtime/pythonw.exe'),
+        path.resolve(process.resourcesPath || '', 'perception-service/runtime/python.exe'),
         path.resolve(process.resourcesPath || '', 'perception-service/.venv/Scripts/pythonw.exe'),
         path.resolve(process.resourcesPath || '', 'perception-service/.venv/Scripts/python.exe'),
         path.resolve(process.cwd(), 'backend/perception-service/.venv/Scripts/pythonw.exe'),
@@ -461,13 +463,18 @@ function spawnPerceptionServiceIfNeeded(): void {
           detached: true,
           stdio: 'ignore',
           windowsHide: true,
+          env: { ...process.env, PYTHONHOME: '', PYTHONPATH: '', PYTHONDONTWRITEBYTECODE: '1' },
         });
+        child.on('error', error => console.warn('[Project Horizon] Perception worker could not start:', error.message));
         child.unref();
       }
     });
 }
 
 app.whenReady().then(async () => {
+  loadGeminiKey();
+  ipcMain.handle('horizon:get-gemini-status', () => getGeminiStatus());
+  ipcMain.handle('horizon:save-gemini-key', (_event, key: string) => saveGeminiKey(key));
   const isVerifyMode = process.argv.includes('--verify-packaged') || process.env.VERIFY_PACKAGED === '1';
   if (isVerifyMode) {
     await runPackagedVerification();
@@ -482,20 +489,6 @@ app.whenReady().then(async () => {
 
   if (mainWindow) {
     agentHost.setMainWindow(mainWindow);
-  }
-
-  // Register Global Hotkeys
-  // Win+Shift+C (and CommandOrControl+Shift+C) summons compact floating prompt bar docked above taskbar
-  const hotkeys = ['CommandOrControl+Shift+C', 'Super+Shift+C'];
-  for (const hk of hotkeys) {
-    try {
-      globalShortcut.register(hk, () => {
-        console.log(`[Project Horizon] Global Hotkey (${hk}) pressed -> toggling floating bar`);
-        toggleFloatingBar();
-      });
-    } catch {
-      // ignore platform-specific registration conflicts
-    }
   }
 
   // Register Escape dismiss handler
@@ -515,19 +508,20 @@ app.whenReady().then(async () => {
     let registeredCount = 0;
     for (const hk of hotkeys) {
       try {
-        if (!globalShortcut.isRegistered(hk)) {
-          globalShortcut.register(hk, () => {
+        if (globalShortcut.isRegistered(hk)) registeredCount++;
+        else {
+          const registered = globalShortcut.register(hk, () => {
             console.log(`[Project Horizon] Global Hotkey (${hk}) triggered floating bar`);
             toggleFloatingBar();
           });
-          registeredCount++;
+          if (registered) registeredCount++;
         }
       } catch (err) {
         console.warn(`[Project Horizon] Could not register ${hk}:`, err);
       }
     }
     console.log(`[Project Horizon] Hotkey approval confirmed: ${registeredCount} registered`);
-    return { success: true, count: registeredCount };
+    return { success: registeredCount > 0, count: registeredCount, error: registeredCount ? undefined : 'This shortcut is already used by another application.' };
   });
 
   ipcMain.handle('horizon:open-main-window', () => {

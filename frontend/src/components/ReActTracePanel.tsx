@@ -25,34 +25,7 @@ export const ReActTracePanel: React.FC<ReActTracePanelProps> = ({
   const [copied, setCopied] = useState(false);
   const [openAccordion, setOpenAccordion] = useState<number[]>([1, 2]);
 
-  const defaultSteps: TraceStep[] = [
-    {
-      id: 1,
-      toolName: "gemini_vision_parse",
-      duration: "140ms",
-      status: "succeeded",
-      params: { query: "shaders/liquid.frag", confidence: "99.4%" },
-      reasoning: "Multimodal embedding mapped compilation error screenshot to line 142 uniform declaration."
-    },
-    {
-      id: 2,
-      toolName: "acquire_window",
-      duration: "85ms",
-      status: "succeeded",
-      params: { targetApp: "Code.exe", windowTitle: "horizon — VS Code" },
-      reasoning: "Brought VS Code buffer window into foreground via Desktop Window Manager."
-    },
-    {
-      id: 3,
-      toolName: "apply_quick_fix",
-      duration: "210ms",
-      status: "in-progress",
-      params: { line: 142, patch: "uniform vec3 uResolution;" },
-      reasoning: "Synthesizing GLSL syntax fix and preparing automated editor buffer insertion."
-    }
-  ];
-
-  const steps = customSteps || defaultSteps;
+  const steps = customSteps || [];
 
   const toggleAccordion = (stepId: number) => {
     setOpenAccordion(prev => 
@@ -79,8 +52,8 @@ export const ReActTracePanel: React.FC<ReActTracePanelProps> = ({
             <GeminiSparkle size={16} />
           </div>
           <div>
-            <div className="text-xs font-bold horizon-gradient-text tracking-wide">GEMINI_REACT_EXECUTION_TRACE</div>
-            <div className="text-[11px] text-slate-500 dark:text-slate-400">Multimodal Agent Graph · {steps.length} Planned Actions</div>
+            <div className="text-xs font-bold horizon-gradient-text tracking-wide">Activity details</div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400">Desktop agent · {steps.length} Actions</div>
           </div>
         </div>
 
@@ -90,7 +63,7 @@ export const ReActTracePanel: React.FC<ReActTracePanelProps> = ({
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-slate-200 dark:border-slate-700/80 hover:bg-[#8CC1E9]/15 text-slate-600 dark:text-slate-300 hover:text-[#0055A0] dark:hover:text-[#8CC1E9] transition-all"
           >
             {copied ? <Check size={13} /> : <Copy size={13} />}
-            <span>{copied ? "Copied" : "Share Trace"}</span>
+            <span>{copied ? "Copied" : "Copy trace"}</span>
           </button>
           {onClose && (
             <button
@@ -104,19 +77,13 @@ export const ReActTracePanel: React.FC<ReActTracePanelProps> = ({
       </div>
 
       {/* Timeline Steps: #8CC1E9 -> #438BC4 -> #0055A0 -> #FFF8E7 */}
-      <div className="space-y-3.5 relative before:absolute before:left-3.5 before:top-2 before:bottom-2 before:w-[2px] before:bg-gradient-to-b before:from-[#8CC1E9] before:via-[#438BC4] before:to-[#FFF8E7]">
+      <div className="trace-timeline">
         {steps.map((step) => {
           const isOpen = openAccordion.includes(step.id);
           return (
-            <div key={step.id} className="relative pl-8 text-xs">
+            <div key={step.id} className="trace-step text-xs">
               {/* Status node */}
-              <div className={`absolute left-2 -translate-x-1/2 top-2.5 w-3 h-3 rounded-full border-2 ${
-                step.status === 'succeeded' 
-                  ? 'bg-[#FFF8E7] border-[#0055A0] shadow-[0_0_10px_rgba(140,193,233,0.85)]' 
-                  : step.status === 'in-progress'
-                  ? 'bg-[#8CC1E9] border-[#12284B] animate-ping'
-                  : 'bg-slate-400 border-slate-600'
-              }`} />
+              <div className={`trace-node trace-node-${step.status}`} aria-hidden="true" />
 
               {/* Step Card */}
               <div className={`p-3.5 rounded-2xl border transition-all ${
@@ -154,7 +121,7 @@ export const ReActTracePanel: React.FC<ReActTracePanelProps> = ({
                     className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-[#0055A0] dark:hover:text-[#8CC1E9] transition-colors"
                   >
                     {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                    <span>Gemini Reasoning Graph</span>
+                    <span>Why this action</span>
                   </button>
                   {isOpen && (
                     <p className="mt-1.5 pl-3 border-l-2 border-[#438BC4] text-[11px] leading-relaxed italic text-slate-600 dark:text-slate-300 bg-[#8CC1E9]/10 p-2 rounded-r-xl">

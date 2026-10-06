@@ -11,6 +11,11 @@ export interface DesktopCaptureData {
 }
 
 contextBridge.exposeInMainWorld('horizonAPI', {
+  getGeminiStatus: () => ipcRenderer.invoke('horizon:get-gemini-status'),
+  saveGeminiKey: (key: string) => ipcRenderer.invoke('horizon:save-gemini-key', key),
+  getWorkspaceRoots: () => ipcRenderer.invoke('horizon:get-workspace-roots'),
+  addWorkspaceRoot: () => ipcRenderer.invoke('horizon:add-workspace-root'),
+  getPerceptionHealth: () => ipcRenderer.invoke('horizon:get-perception-health'),
   captureDesktop: (targetWindowName?: string): Promise<DesktopCaptureData> => ipcRenderer.invoke('horizon:capture-desktop', targetWindowName),
   openTargetApp: (title?: string) => ipcRenderer.invoke('horizon:open-target-app', title),
   getDesktopSources: () => ipcRenderer.invoke('horizon:get-desktop-sources'),
@@ -43,7 +48,7 @@ contextBridge.exposeInMainWorld('horizonAPI', {
   getSystemInfo: () => ipcRenderer.invoke('horizon:get-system-info'),
 
   // Step 4c: In-process agent coordinator IPC
-  executeTask: (payload: { prompt: string; sessionId?: string; images?: string[] }) =>
+  executeTask: (payload: { prompt: string; sessionId?: string; images?: string[]; history?: Array<{role: 'user' | 'assistant'; text: string}> }) =>
     ipcRenderer.invoke('horizon:execute-task', payload),
   resolveTier2: (payload: { actionId: string; authorized: boolean }) =>
     ipcRenderer.invoke('horizon:resolve-tier2', payload),

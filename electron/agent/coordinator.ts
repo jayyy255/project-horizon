@@ -11,6 +11,8 @@ import { ActionVerifier } from './verifier';
 import { ReflexiveMatcher } from './reflexive';
 import { ModelRouter, ModelCircuitBreaker } from './router';
 import { CommandCache } from './cache';
+import { agentDataPath } from './sqlite';
+import { parseProjectOpen } from './workspaces';
 
 export interface ReActStep {
   stepIndex: number;
@@ -28,6 +30,7 @@ export interface ReActSessionState {
   sessionId: string;
   taskPrompt: string;
   images?: string[];
+  history?: Array<{ role: 'user' | 'assistant'; text: string }>;
   status: 'idle' | 'working' | 'done' | 'error' | 'awaiting_tier2';
   currentNarration: string;
   currentTool?: string;
@@ -68,8 +71,8 @@ export class AgentCoordinator {
     this.projectIndexer = projectIndexer;
     this.inputSynthesizer = inputSynthesizer;
     this.auditDb = auditDb;
-    this.systemGraph = new SystemKnowledgeGraph(path.join(process.cwd(), 'horizon_graph.db'));
-    this.commandCache = new CommandCache(path.join(process.cwd(), 'horizon_cache.db'), undefined, this.projectIndexer);
+    this.systemGraph = new SystemKnowledgeGraph(agentDataPath('horizon_graph.db'));
+    this.commandCache = new CommandCache(agentDataPath('horizon_cache.db'), undefined, this.projectIndexer);
     this.onStateChange = onStateChange;
   }
 
@@ -125,8 +128,13 @@ export class AgentCoordinator {
     sessionId: string,
     prompt: string,
     plannerOverrideOrImages?: ((state: ReActSessionState) => Promise<{ action?: ProposedAction; finalAnswer?: string }>) | string[],
-    imagesOrPlannerOverride?: string[] | ((state: ReActSessionState) => Promise<{ action?: ProposedAction; finalAnswer?: string }>)
+    imagesOrPlannerOverride?: string[] | ((state: ReActSessionState) => Promise<{ action?: ProposedAction; finalAnswer?: string }>),
+    history?: Array<{ role: 'user' | 'assistant'; text: string }>
   ): Promise<ReActSessionState> {
+    if (this.activeSession && ['working', 'awaiting_tier2'].includes(this.activeSession.status)) {
+      throw new Error('Finish or cancel the current task before starting another one.');
+    }
+    if (!prompt.trim()) throw new Error('Enter an instruction before starting a task.');
     let plannerOverride: ((state: ReActSessionState) => Promise<{ action?: ProposedAction; finalAnswer?: string }>) | undefined;
     let images: string[] = [];
 
@@ -140,6 +148,8 @@ export class AgentCoordinator {
       if (typeof imagesOrPlannerOverride === 'function') {
         plannerOverride = imagesOrPlannerOverride;
       }
+    } else if (Array.isArray(imagesOrPlannerOverride)) {
+      images = imagesOrPlannerOverride;
     } else if (typeof imagesOrPlannerOverride === 'function') {
       plannerOverride = imagesOrPlannerOverride;
     }
@@ -148,12 +158,16 @@ export class AgentCoordinator {
       sessionId,
       taskPrompt: prompt,
       images,
+      history,
       status: 'working',
       currentNarration: 'Analyzing task and searching workspace...',
       steps: [],
     };
 
     this.inputSynthesizer.reset();
+    this.activeFrameLookup.clear();
+    const projectIntent = !plannerOverride ? parseProjectOpen(prompt) : null;
+    const reflexiveIntent = !plannerOverride ? this.reflexiveMatcher.match(prompt) : null;
 
     this.auditDb.createSession({
       sessionId,
@@ -197,13 +211,15 @@ export class AgentCoordinator {
         return this.activeSession;
       }
 
-      let plan: { action?: ProposedAction; finalAnswer?: string };
+      let plan: { action?: ProposedAction; finalAnswer?: string; error?: string };
 
       if (plannerOverride) {
         plan = await plannerOverride(this.activeSession);
+      } else if (projectIntent) {
+        plan = this.planProjectOpen(this.activeSession, projectIntent.query);
       } else if (this.activeSession.steps.length === 0) {
         // Check Phase C CommandCache before invoking LLM planner or reflexive matching
-        const cachedAction = this.commandCache.lookup('default_user', this.activeSession.taskPrompt);
+        const cachedAction = reflexiveIntent ? this.commandCache.lookup('default_user', this.activeSession.taskPrompt) : null;
         if (cachedAction) {
           console.log(`[Command Cache] Cache hit for "${this.activeSession.taskPrompt}": ${cachedAction.tool_name}`);
           const cachedWithPrefix: ProposedAction = {
@@ -215,7 +231,7 @@ export class AgentCoordinator {
           plan = { action: cachedWithPrefix };
         } else {
           const reflexiveStart = performance.now();
-          const reflexiveAction = this.reflexiveMatcher.match(this.activeSession.taskPrompt);
+          const reflexiveAction = reflexiveIntent;
           const reflexiveLatencyMs = performance.now() - reflexiveStart;
 
           if (reflexiveAction) {
@@ -241,13 +257,21 @@ export class AgentCoordinator {
 
       if (!plan.action) {
         this.activeSession.status = 'error';
-        this.activeSession.currentNarration = 'Planner produced no viable action.';
+        this.activeSession.currentNarration = plan.error || 'Planner produced no viable action.';
         this.auditDb.updateSessionOutcome(sessionId, 'failed');
         this.notify();
         return this.activeSession;
       }
 
       const action = plan.action;
+      const repeated = this.activeSession.steps.filter(step => step.toolName === action.tool_name && JSON.stringify(step.args) === JSON.stringify(action.args));
+      if (repeated.length >= 2) {
+        this.activeSession.status = 'error';
+        this.activeSession.currentNarration = 'Stopped: the planner repeated the same action without completing your request. Try a more specific instruction or add the project location in Preferences.';
+        this.auditDb.updateSessionOutcome(sessionId, 'failed');
+        this.notify();
+        return this.activeSession;
+      }
       const gateResult: GateEvaluationResult = this.safetyGate.evaluate(
         sessionId,
         action,
@@ -347,7 +371,7 @@ export class AgentCoordinator {
       }
 
       step.status = 'succeeded';
-      this.commandCache.recordVerifiedSuccess('default_user', this.activeSession.taskPrompt, action);
+      if (reflexiveIntent) this.commandCache.recordVerifiedSuccess('default_user', this.activeSession.taskPrompt, reflexiveIntent);
       this.auditDb.logToolTrace({
         sessionId,
         stepIndex,
@@ -363,8 +387,9 @@ export class AgentCoordinator {
       this.notify();
     }
 
-    this.activeSession.status = 'done';
-    this.auditDb.updateSessionOutcome(sessionId, 'succeeded');
+    this.activeSession.status = 'error';
+    this.activeSession.currentNarration = 'Stopped after 10 steps without completing your request. No successful completion was confirmed.';
+    this.auditDb.updateSessionOutcome(sessionId, 'failed');
     this.notify();
     return this.activeSession;
   }
@@ -378,6 +403,7 @@ export class AgentCoordinator {
     }
 
     const payload = this.activeSession.pendingTier2;
+    if (!payload || payload.actionId !== actionId) throw new Error('The approval does not match the pending action.');
     this.activeSession.pendingTier2 = undefined;
 
     this.auditDb.logTier2Approval({
@@ -389,6 +415,8 @@ export class AgentCoordinator {
     });
 
     if (!authorized) {
+      const deniedStep = this.activeSession.steps[this.activeSession.steps.length - 1];
+      if (deniedStep) { deniedStep.status = 'failed'; deniedStep.result = { status: 'cancelled', reason: 'Denied by user' }; }
       this.activeSession.status = 'idle';
       this.activeSession.currentNarration = 'Tier 2 action denied by user.';
       this.auditDb.updateSessionOutcome(this.activeSession.sessionId, 'cancelled');
@@ -449,7 +477,8 @@ export class AgentCoordinator {
       }
 
       currentStep.status = 'succeeded';
-      this.commandCache.recordVerifiedSuccess('default_user', this.activeSession.taskPrompt, {
+      const reflexive = this.reflexiveMatcher.match(this.activeSession.taskPrompt);
+      if (reflexive) this.commandCache.recordVerifiedSuccess('default_user', this.activeSession.taskPrompt, {
         tool_name: currentStep.toolName,
         args: currentStep.args,
         narration: currentStep.narration,
@@ -468,18 +497,36 @@ export class AgentCoordinator {
       });
     }
 
-    this.activeSession.status = 'done';
-    this.activeSession.currentNarration = 'Task completed successfully.';
-    this.auditDb.updateSessionOutcome(this.activeSession.sessionId, 'succeeded');
+    const completedSingleAction = Boolean(this.reflexiveMatcher.match(this.activeSession.taskPrompt));
+    this.activeSession.status = completedSingleAction ? 'done' : 'error';
+    this.activeSession.currentNarration = completedSingleAction
+      ? 'Task completed successfully.'
+      : 'The approved action completed, but the full request has not been verified. This build does not resume planning after approval; submit a follow-up instruction.';
+    this.auditDb.updateSessionOutcome(this.activeSession.sessionId, completedSingleAction ? 'succeeded' : 'failed');
     this.notify();
     return this.activeSession;
+  }
+
+  private planProjectOpen(state: ReActSessionState, query: string): { action?: ProposedAction; finalAnswer?: string; error?: string } {
+    const search = state.steps.find(step => step.toolName === 'find_path');
+    if (!search) return { action: { tool_name:'find_path', args:{search_term:query,project_only:true}, narration:`Finding the ${query} project…`, provenance:'user_task' } };
+    let candidates = (search.result as {results?:Array<{name:string;path:string;score:number}>})?.results || [];
+    if (candidates[0]?.score === 2) candidates = candidates.filter(item => item.score === 2);
+    if (!candidates.length) return {error:`Could not find the "${query}" project in your indexed workspaces. Add its parent folder in Preferences → Project Roots, or give the full folder path.`};
+    if (candidates.length > 1) return {error:`More than one project matches "${query}". Specify the full name or path: ${candidates.map(item => item.path).join(', ')}`};
+    const target = candidates[0].path;
+    if (!state.steps.some(step => step.toolName === 'launch_app')) return {action:{tool_name:'launch_app',args:{executable_path:'code',args:['--new-window',target]},narration:`Opening ${candidates[0].name} in VS Code…`,provenance:'user_task'}};
+    return {finalAnswer:`Opened ${candidates[0].name} in VS Code (${target}).`};
   }
 
   private async dispatchTool(toolName: string, args: Record<string, unknown>): Promise<unknown> {
     switch (toolName) {
       case 'find_path': {
         const query = String(args.search_term || '');
-        const results = this.projectIndexer.findPath(query, 5);
+        let results = args.project_only ? this.projectIndexer.findProjects(query, 10) : this.projectIndexer.findPath(query, 5);
+        if (args.project_only && path.isAbsolute(query)) {
+          try { results = fs.statSync(query).isDirectory() ? [{name:path.basename(query),path:path.resolve(query),manifest_type:'folder',score:2}] : []; } catch { results=[]; }
+        }
         return {
           verified: true,
           status: 'succeeded',
@@ -552,6 +599,13 @@ export class AgentCoordinator {
               processPatterns.push('Code', 'Code.exe', 'Antigravity IDE', 'antigravity-ide');
               titlePatterns.push('antigravity ide', 'project-horizon', 'visual studio code', 'code');
             }
+          } else if (fs.existsSync(exe) && fs.statSync(exe).isDirectory()) {
+            const editor = this.projectIndexer.findInstalledApp('code');
+            if (!editor?.exePath) throw new Error('VS Code is not installed at a known location.');
+            launchCommand = editor.exePath;
+            launchArgs = ['--new-window',exe];
+            processPatterns = ['Code'];
+            titlePatterns = [path.basename(exe).toLowerCase()];
           } else if (fs.existsSync(exe)) {
             // Path 1: Direct file path on disk
             launchMethod = 'direct_exe';
@@ -575,7 +629,7 @@ export class AgentCoordinator {
               launchArgs = [`shell:AppsFolder\\${calcApp?.appId || 'Microsoft.WindowsCalculator_8wekyb3d8bbwe!App'}`];
               processPatterns = ['CalculatorApp', 'Calculator*', 'calc', 'ApplicationFrameHost'];
               titlePatterns = ['calculator'];
-            } else if (lower.includes('code') || lower.includes('vscode')) {
+            } else if (/^(code|code\.cmd|vscode|vs code|visual studio code)$/.test(lower)) {
               const userVsCode = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Microsoft VS Code', 'Code.exe');
               launchMethod = 'direct_exe';
               launchCommand = fs.existsSync(userVsCode) ? userVsCode : 'code';
@@ -594,13 +648,6 @@ export class AgentCoordinator {
               launchArgs = [`shell:AppsFolder\\${installed.appId}`];
               processPatterns = [installed.name, 'ApplicationFrameHost'];
               titlePatterns = [installed.name.toLowerCase()];
-            } else if (fs.existsSync(exe) && fs.statSync(exe).isDirectory()) {
-              launchMethod = 'direct_exe';
-              const userVsCode = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Microsoft VS Code', 'Code.exe');
-              launchCommand = fs.existsSync(userVsCode) ? userVsCode : 'code';
-              launchArgs = [exe];
-              processPatterns = ['Code', 'Code.exe', 'Antigravity IDE', 'antigravity-ide', 'explorer.exe'];
-              titlePatterns = [path.basename(exe).toLowerCase(), 'visual studio code', 'code', 'antigravity ide', 'project-horizon'];
             } else {
               // Direct exe attempt fallback
               launchMethod = 'direct_exe';
@@ -609,6 +656,12 @@ export class AgentCoordinator {
               processPatterns = [path.basename(exe, '.exe')];
               titlePatterns = [exe.toLowerCase()];
             }
+          }
+
+          let requestedWorkspace: string | undefined;
+          if (/^code(?:\.exe)?$/i.test(path.basename(launchCommand)) || /^(?:code|vs\s*code|visual studio code)$/i.test(exe)) {
+            requestedWorkspace = launchArgs.find(arg => path.isAbsolute(arg) && !arg.startsWith('-'));
+            if (requestedWorkspace && !fs.existsSync(requestedWorkspace)) throw new Error(`The requested workspace does not exist: ${requestedWorkspace}`);
           }
 
           // Clean environment to prevent Electron / VS Code variable poisoning
@@ -625,7 +678,7 @@ export class AgentCoordinator {
             child = spawn('cmd.exe', ['/c', 'start', launchCommand, ...launchArgs], {
               detached: true,
               stdio: 'ignore',
-              windowsHide: true,
+              windowsHide: false,
             });
           } else {
             const isBatch = /\.bat$|\.cmd$/i.test(launchCommand);
@@ -636,24 +689,24 @@ export class AgentCoordinator {
               stdio: 'ignore',
               shell: false,
               env: cleanEnv,
-              windowsHide: true,
+              // GUI targets must receive a visible startup window. Hiding Code's
+              // initial window also hides the requested workspace on first launch.
+              windowsHide: isBatch || /^(cmd|powershell|pwsh)(\.exe)?$/i.test(path.basename(launchCommand)),
             });
           }
+          await new Promise<void>((resolve,reject) => {
+            child.once('spawn',resolve);
+            child.once('error',reject);
+          });
           child.unref();
 
           // If this is a destructive CLI file deletion (del / rmdir), verify disk effect directly
-          const isCliDeletion = cmdArgs.some(a => /del|erase|rmdir|remove/i.test(a));
+          const isCliDeletion = /^(cmd|powershell|pwsh)(\.exe)?$/i.test(path.basename(launchCommand))
+            && cmdArgs.some(arg => /^(del|erase|rmdir|remove-item)(?:\s|$)/i.test(arg.trim()));
           if (isCliDeletion) {
             const targetArg = cmdArgs.find(a => !/^\/[a-zA-Z]$/.test(a) && !/del|erase|rmdir|remove/i.test(a) && (a.includes('\\') || a.includes('/') || a.includes('.'))) || cmdArgs[cmdArgs.length - 1] || '';
-            try {
-              if (targetArg && fs.existsSync(targetArg)) {
-                fs.unlinkSync(targetArg);
-              }
-            } catch (e) {
-              console.warn('[ActionVerifier] Deletion fallback:', e);
-            }
             await new Promise(r => setTimeout(r, 400));
-            const stillExists = targetArg ? fs.existsSync(targetArg) : false;
+            const stillExists = !targetArg || fs.existsSync(targetArg);
             return {
               verified: !stillExists,
               status: !stillExists ? 'succeeded' : 'failed',
@@ -681,8 +734,9 @@ export class AgentCoordinator {
             processPatterns,
             titlePatterns,
             baselineWindows,
-            timeoutMs: 5000,
+            timeoutMs: requestedWorkspace ? 15000 : 5000,
             pollIntervalMs: 200,
+            requiredTitlePattern: requestedWorkspace ? path.basename(requestedWorkspace) : undefined,
           });
 
           return {
@@ -704,101 +758,29 @@ export class AgentCoordinator {
         }
       }
       case 'check_open_workspace': {
-        const app = String(args.app_name || 'vscode');
-        const ws = this.systemGraph.getOpenWorkspace(app);
-        return ws ? { verified: true, status: 'succeeded', ...ws } : { verified: true, status: 'succeeded', state: 'none_open' };
-      }
-      case 'focus_window': {
-        const target = String(args.process_name || args.window_title || '');
-        const windows = ActionVerifier.getVisibleWindows();
-        const found = windows.find(w =>
-          (args.process_name && w.process.toLowerCase().includes(String(args.process_name).toLowerCase())) ||
-          (args.window_title && w.title.toLowerCase().includes(String(args.window_title).toLowerCase())) ||
-          w.title.toLowerCase().includes(target.toLowerCase())
-        );
-        return {
-          verified: !!found,
-          status: found ? 'succeeded' : 'failed',
-          focused: !!found,
-          target,
-          window: found,
-          details: found
-            ? `Confirmed focus target window "${found.title}" (PID ${found.pid}).`
-            : `Failed to find visible window matching "${target}".`,
-        };
+        const windows = ActionVerifier.getVisibleWindows().filter(window => /^(code|code.exe)$/i.test(window.process) || /visual studio code/i.test(window.title));
+        return { verified:windows.length === 0, status:windows.length ? 'failed' : 'succeeded', windows, count:windows.length, state:windows.length ? 'workspace_path_unconfirmed' : 'none_open', details:windows.length ? 'VS Code is open, but window titles alone cannot confirm its active folder. No workspace path was verified.' : 'No visible VS Code window is open.' };
       }
       case 'inspect_viewport': {
-        return {
-          verified: true,
-          status: 'succeeded',
-          elements: Array.from(this.activeFrameLookup.values()),
-          count: this.activeFrameLookup.size,
-        };
+        try {
+          const { desktopCapturer, screen } = require('electron');
+          if (!desktopCapturer || !screen) throw new Error('Desktop capture requires the running Electron app.');
+          const display = screen.getPrimaryDisplay();
+          const sources = await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:Math.round(display.size.width*display.scaleFactor),height:Math.round(display.size.height*display.scaleFactor)}});
+          const source = sources.find((item:any) => item.display_id === String(display.id)) || sources[0];
+          if (!source || source.thumbnail.isEmpty()) throw new Error('No desktop image was returned.');
+          const image = source.thumbnail.toDataURL();
+          this.activeSession!.images = [image];
+          return { verified:true, status:'succeeded', captured:true, source:source.name, dimensions:source.thumbnail.getSize(), details:'Captured the current desktop screen.' };
+        } catch (error:any) { return {verified:false,status:'failed',details:error.message}; }
       }
-      case 'click_element': {
-        const tagId = Number(args.tag_id);
-        const element = this.activeFrameLookup.get(tagId);
-        const targetCenter = element?.center || [300, 300];
-
-        const trajectory = this.inputSynthesizer.generateBezierTrajectory(
-          this.cursorPosition,
-          { x: targetCenter[0], y: targetCenter[1] },
-          20
-        );
-
-        const jitterX = (Math.random() - 0.5) * 2;
-        const jitterY = (Math.random() - 0.5) * 2;
-        const actualX = targetCenter[0] + jitterX;
-        const actualY = targetCenter[1] + jitterY;
-        const precisionDeltaPx = Math.hypot(actualX - targetCenter[0], actualY - targetCenter[1]);
-
-        this.cursorPosition = { x: Math.round(actualX), y: Math.round(actualY) };
-
-        let visualDelta = args.visual_delta as any;
-        if (!visualDelta) {
-          const measuredPercent = Number((1.2 + Math.random() * 1.6).toFixed(2));
-          visualDelta = { diffPercent: measuredPercent };
-        }
-        const delta = ActionVerifier.verifyClickElementDelta(targetCenter, this.cursorPosition, visualDelta);
-
-        return {
-          verified: delta.verified,
-          status: delta.verified ? 'succeeded' : 'failed',
-          clicked: delta.verified,
-          tag_id: tagId,
-          targetCenter,
-          actualClick: { x: Math.round(actualX), y: Math.round(actualY) },
-          precisionDeltaPx: Number(precisionDeltaPx.toFixed(2)),
-          visualDeltaPercent: delta.visualDeltaPercent,
-          trajectorySteps: trajectory.length,
-          element: element || { label: args.label || `Tag_${tagId}` },
-          details: delta.details,
-        };
-      }
-      case 'send_hotkey': {
-        const keys = String(args.keys || '');
-        const visualDelta = args.visual_delta as any;
-        const delta = ActionVerifier.verifyHotkeyDelta(keys, visualDelta);
-        return {
-          verified: delta.verified,
-          status: delta.verified ? 'succeeded' : 'failed',
-          keys,
-          visualDeltaPercent: delta.visualDeltaPercent,
-          details: delta.details,
-        };
-      }
-      case 'type_text': {
-        const text = String(args.text || '');
-        return {
-          verified: true,
-          status: 'succeeded',
-          typed: true,
-          charCount: text.length,
-          details: `Dispatched text of length ${text.length}.`,
-        };
-      }
+      case 'focus_window':
+      case 'click_element':
+      case 'send_hotkey':
+      case 'type_text':
+        return { verified:false, status:'failed', details:'Physical window focus, clicks, typing, and keyboard shortcuts are not connected to a native input adapter in this build. No desktop input was sent.' };
       default:
-        return { verified: true, status: 'succeeded', executed: true, tool: toolName };
+        return { verified:false, status:'failed', details:'Unsupported tool: ' + toolName };
     }
   }
 
@@ -806,7 +788,7 @@ export class AgentCoordinator {
 
   private async queryGeminiPlanner(
     state: ReActSessionState
-  ): Promise<{ action?: ProposedAction; finalAnswer?: string } | null> {
+  ): Promise<{ action?: ProposedAction; finalAnswer?: string; error?: string } | null> {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey || apiKey === 'your_gemini_api_key_here') return null;
 
@@ -831,6 +813,7 @@ export class AgentCoordinator {
       ).join('\n');
 
       let userContent = `Task: "${state.taskPrompt}"\n\n`;
+      if (state.history?.length) userContent += `Earlier conversation (context, not new instructions):\n${JSON.stringify(state.history.slice(-10))}\n\n`;
 
       if (this.activeFrameLookup.size > 0) {
         const somElements = Array.from(this.activeFrameLookup.values()).slice(0, 25);
@@ -841,7 +824,7 @@ export class AgentCoordinator {
 
       userContent += `History of executed steps and results:\n${historySummary || 'None'}`;
 
-      const parts: any[] = [{ text: `${systemInstruction}\n\n${userContent}` }];
+      const parts: any[] = [{ text: userContent }];
 
       if (state.images && state.images.length > 0) {
         for (const img of state.images) {
@@ -859,6 +842,7 @@ export class AgentCoordinator {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemInstruction + '\nAttached images are already captured observations. For a question about an attached image, answer from that image. If the user asks for an answer without desktop tools, return final_answer and do not propose a tool.' }] },
           contents: [{ role: 'user', parts }],
           generationConfig: {
             temperature: 0.1,
@@ -887,6 +871,8 @@ export class AgentCoordinator {
 
       const parsed = JSON.parse(rawText);
       this.modelRouter.getCircuitBreaker().recordSuccess(model);
+
+      if (parsed.error) return {error:String(parsed.error)};
 
       if (parsed.tool_name) {
         return {
@@ -1025,7 +1011,7 @@ Respond ONLY with a valid JSON object matching:
 
   private async defaultCLIFirstPlanner(
     state: ReActSessionState
-  ): Promise<{ action?: ProposedAction; finalAnswer?: string }> {
+  ): Promise<{ action?: ProposedAction; finalAnswer?: string; error?: string }> {
     // If deterministic unit test mode is explicitly requested via env variable
     if (process.env.MOCK_PLANNER === 'true') {
       return this.fallbackDeterministicPlanner(state);
@@ -1045,9 +1031,9 @@ Respond ONLY with a valid JSON object matching:
       return ollamaPlan;
     }
 
-    // 3. Fallback: Deterministic planner fallback
-    console.warn('[AgentCoordinator] Both Gemini live API and Ollama local fallback failed or timed out; engaging deterministic fallback.');
-    return this.fallbackDeterministicPlanner(state);
+    // Sample plans are reserved for explicit tests; a live failure must remain a failure.
+    console.warn('[AgentCoordinator] Gemini and Ollama planners are unavailable.');
+    return { error: 'Horizon could not reach a reasoning model. Check your Gemini API configuration or local Ollama service, then try again.' };
   }
 
   /**

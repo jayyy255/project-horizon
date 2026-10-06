@@ -1,0 +1,13 @@
+# Windows installer
+
+Use Node.js and the repository's npm lockfiles. Create `backend/perception-service/.venv` with Python 3.13, then install its requirements. The model at `backend/perception-service/models/yolov8n.onnx` is tracked.
+
+Run `npm run package:win`. This builds the current UI/Electron sources, downloads the official Python 3.13.2 x64 embeddable distribution, copies the installed perception dependencies, compiles the native window verifier with Windows' .NET Framework compiler, and creates an NSIS per-user installer. Large unused development packages such as Torch and Ultralytics are excluded. The runtime is tested by initializing the ONNX and OCR engines before packaging. Python's [embeddable-package documentation](https://docs.python.org/3.13/using/windows.html#the-embeddable-package) describes this application-local distribution format.
+
+Build artifacts and staging files are under ignored `release/`. App icons and packaging sources are tracked. No `.env`, user databases, screenshots or credentials are included in the payload.
+
+Run `node packaging/verify-package.cjs` after packaging to check the actual executable, branding, key setup, delayed hotkey registration, bundled native verifier, and the bundled perception server on an isolated port without host Python. This local smoke test currently also checks the user's code-security-reviewer project command; change that prompt to an available project when running elsewhere. It uses an isolated user-data directory and the executable's loopback inspector, then terminates its own test processes. It does not call an external model.
+
+The setup wizard supports an installation-directory choice, desktop shortcut and Start menu shortcut. The installer is unsigned unless a signing identity is configured for electron-builder. End users configure their own Gemini key under Preferences → Inference Engine after installation.
+
+After committing and pushing the verified source to `origin/main`, run `node packaging/publish-release.cjs` to publish the installer and SHA-256 file on the project's GitHub release. The helper uses the existing Git credential in memory, uploads into a draft, and publishes only after the installer upload completes. Local screenshots, smoke reports and user profiles are not uploaded.

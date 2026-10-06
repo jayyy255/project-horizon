@@ -29,6 +29,7 @@ export interface AppVerifyOptions {
   timeoutMs?: number;
   pollIntervalMs?: number;
   requireNewWindow?: boolean;
+  requiredTitlePattern?: string;
 }
 
 export class ActionVerifier {
@@ -36,6 +37,7 @@ export class ActionVerifier {
 
   public static getVisibleWindows(): WindowRecord[] {
     const candidatePaths = [
+      path.join(process.resourcesPath || '', 'native', 'list_windows.exe'),
       this.listWindowsExePath,
       path.resolve(process.cwd(), 'scripts/list_windows.exe'),
       path.resolve(__dirname, '../../../scripts/list_windows.exe'),
@@ -161,13 +163,18 @@ export class ActionVerifier {
       const matchingWindow = currentWindows.find(w => {
         // Window title pattern match
         const lowerTitle = w.title.toLowerCase();
-        const titleMatches = allTitlePatterns.some(pat => lowerTitle.includes(pat));
+        if (options.requiredTitlePattern && !lowerTitle.includes(options.requiredTitlePattern.toLowerCase())) return false;
+        const titleMatches = allTitlePatterns.some(pat => {
+          const escaped = pat.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          return escaped && new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`).test(lowerTitle);
+        });
 
         // Process name pattern match
         const lowerProc = w.process.toLowerCase();
         const procMatches = processPatterns.some(pat => {
           const clean = pat.toLowerCase().replace(/\.exe$/i, '');
-          return clean && lowerProc.includes(clean);
+          const escaped = clean.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+          return escaped && new RegExp(`^${escaped}$`).test(lowerProc.replace(/\.exe$/i, ''));
         });
 
         const isGenericHost = ['applicationframehost', 'explorer', 'conhost', 'svchost'].some(g => lowerProc.includes(g));

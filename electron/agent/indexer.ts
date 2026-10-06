@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
-import { createRequire } from 'module';
+import { resolveSqlite } from './sqlite';
 
 export interface InstalledAppRecord {
   appId: string;
@@ -27,18 +27,6 @@ export interface SearchResult {
   score: number;
 }
 
-function resolveSqlite() {
-  try {
-    return require('better-sqlite3');
-  } catch {
-    try {
-      const agentReq = createRequire(path.resolve(__dirname, '../../../backend/agent-service/package.json'));
-      return agentReq('better-sqlite3');
-    } catch {
-      return null;
-    }
-  }
-}
 
 export class ProjectIndexer {
   private db: any = null;
@@ -163,14 +151,14 @@ export class ProjectIndexer {
   }
 
   public findInstalledApp(query: string): InstalledAppRecord | null {
-    const q = query.toLowerCase().trim();
+    const rawQuery = query.toLowerCase().trim();
+    const q = /^(vs\s*code|visual studio code)$/.test(rawQuery) ? 'code' : rawQuery;
     if (!q) return null;
 
     if (q === 'code' || q === 'vscode' || q === 'visual studio code') {
       const codeCandidates = [
         path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Microsoft VS Code', 'Code.exe'),
         'C:/Program Files/Microsoft VS Code/Code.exe',
-        'C:/Users/Jay/AppData/Local/Programs/Microsoft VS Code/Code.exe',
       ];
       for (const c of codeCandidates) {
         if (fs.existsSync(c)) {
@@ -232,10 +220,12 @@ export class ProjectIndexer {
       manifest_type: item.manifest_type || '',
       content: item.content || ''
     };
+    this.inMemoryIndex = this.inMemoryIndex.filter(existing => existing.path !== record.path);
     this.inMemoryIndex.push(record);
 
     if (this.db) {
       try {
+        this.db.prepare('DELETE FROM project_index WHERE path = ?').run(record.path);
         const insertStmt = this.db.prepare(`
           INSERT INTO project_index (name, path, manifest_type, content)
           VALUES (?, ?, ?, ?)
@@ -262,6 +252,7 @@ export class ProjectIndexer {
     if (!fs.existsSync(rootDir)) return 0;
 
     let count = 0;
+    this.indexItem({ name: path.basename(rootDir), path: rootDir, manifest_type: 'folder' });
     const targetManifests = new Set([
       'package.json',
       'requirements.txt',
@@ -284,7 +275,7 @@ export class ProjectIndexer {
       for (const entry of entries) {
         const fullPath = path.join(currentDir, entry.name);
         if (entry.isDirectory()) {
-          if (entry.name === 'node_modules' || entry.name === '.venv' || entry.name === 'dist') {
+          if (['node_modules', '.venv', 'venv', 'dist', 'dist-electron', 'release', 'scratch', '__pycache__', '.pytest_cache', '.cache'].includes(entry.name)) {
             continue;
           }
           if (entry.name === '.git') {
@@ -337,13 +328,15 @@ export class ProjectIndexer {
   }
 
   public findPath(query: string, limit = 10): SearchResult[] {
-    const sanitized = query.trim().replace(/['"*]/g, '');
+    const sanitized = query.trim().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
     if (!sanitized) return [];
+    const namedProjects = this.findProjects(sanitized, limit);
+    if (namedProjects.length) return namedProjects;
 
     if (this.db) {
       try {
         const tokens = sanitized.split(/\s+/).filter(Boolean);
-        const ftsQuery = tokens.map(t => `"${t}"*`).join(' OR ');
+        const ftsQuery = tokens.map(t => `"${t}"*`).join(' AND ');
 
         const stmt = this.db.prepare(`
           SELECT 
@@ -384,18 +377,36 @@ export class ProjectIndexer {
       const itemPath = item.path.toLowerCase();
       const content = (item.content || '').toLowerCase();
       const matchesAll = tokens.every(t => name.includes(t) || itemPath.includes(t) || content.includes(t));
-      const matchesAny = tokens.some(t => name.includes(t) || itemPath.includes(t));
-      if (matchesAll || matchesAny) {
+      if (matchesAll) {
         matches.push({
           name: item.name,
           path: item.path,
           manifest_type: item.manifest_type,
-          score: matchesAll ? 1.0 : 0.5,
+          score: 1.0,
         });
         if (matches.length >= limit) break;
       }
     }
     return matches;
+  }
+
+  /** Project resolution uses directory names, never a content-only search hit. */
+  public findProjects(query: string, limit = 10): SearchResult[] {
+    const tokens = query.toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+    if (!tokens.length) return [];
+    const records: Array<{name:string;path:string;manifest_type:string}> = this.db
+      ? this.db.prepare("SELECT name,path,manifest_type FROM project_index WHERE manifest_type IN ('folder','git')").all()
+      : this.inMemoryIndex.filter(item => ['folder', 'git'].includes(item.manifest_type));
+    const candidates = new Map<string, SearchResult>();
+    for (const item of records) {
+      const words = item.name.toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+      if (!tokens.every(token => words.some(word => word === token || word.startsWith(token)))) continue;
+      try { if (!fs.statSync(item.path).isDirectory()) continue; } catch { continue; }
+      const exact = words.join(' ') === tokens.join(' ');
+      candidates.set(path.resolve(item.path).toLowerCase(), {...item, score:exact ? 2 : 1});
+    }
+    const sorted = [...candidates.values()].sort((a,b) => b.score-a.score || a.path.localeCompare(b.path));
+    return sorted.filter(item => !sorted.some(other => other !== item && other.path.toLowerCase().startsWith(item.path.toLowerCase()+path.sep) && other.name.toLowerCase() === item.name.toLowerCase())).slice(0,limit);
   }
 
   public close(): void {

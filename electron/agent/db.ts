@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { createRequire } from 'module';
+import { resolveSqlite } from './sqlite';
 
 export interface AuditSession {
   sessionId: string;
@@ -31,18 +31,6 @@ export interface Tier2ApprovalRecord {
   timestamp: number;
 }
 
-function resolveSqlite() {
-  try {
-    return require('better-sqlite3');
-  } catch {
-    try {
-      const agentReq = createRequire(path.resolve(__dirname, '../../../backend/agent-service/package.json'));
-      return agentReq('better-sqlite3');
-    } catch {
-      return null;
-    }
-  }
-}
 
 export class AuditDatabase {
   private db: any = null;

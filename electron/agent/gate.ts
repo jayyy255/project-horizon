@@ -197,7 +197,7 @@ export class SafetyGate {
         const normalized = path.normalize(execPath).toLowerCase();
         const base = path.basename(execPath).toLowerCase();
         const isUnderAllowedRoot = this.allowedProjectRoots.some(root => normalized.startsWith(root));
-        const isStandardDevTool = ['code', 'code.cmd', 'git', 'npm', 'node', 'python', 'whatsapp', 'whatsapp:', 'spotify', 'spotify:', 'vscode', 'notepad', 'notepad.exe', 'calculator', 'calc', 'calc.exe', 'cmd', 'cmd.exe', 'powershell', 'powershell.exe', 'wt', 'wt.exe', 'terminal'].includes(base) ||
+        const isStandardDevTool = ['code', 'code.cmd', 'vs code', 'visual studio code', 'git', 'npm', 'node', 'python', 'whatsapp', 'whatsapp:', 'spotify', 'spotify:', 'vscode', 'notepad', 'notepad.exe', 'calculator', 'calc', 'calc.exe', 'cmd', 'cmd.exe', 'powershell', 'powershell.exe', 'wt', 'wt.exe', 'terminal'].includes(base) ||
           base.startsWith('whatsapp') || base.startsWith('spotify') ||
           execPath.toLowerCase().startsWith('whatsapp') || execPath.toLowerCase().startsWith('spotify') ||
           execPath.toLowerCase().startsWith('shell:appsfolder') || execPath.toLowerCase().startsWith('shell:') ||

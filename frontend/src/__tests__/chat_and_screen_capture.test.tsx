@@ -1,7 +1,11 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import App from '../App';
 import { ContextualPromptBar, ScreenAttachment } from '../components/ContextualPromptBar';
+import { agentClient } from '../services/agentClient';
+import { seedConversations } from './fixtures';
+
+beforeEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
 
 describe('Chat, Screen Capture, Multi-Attachments & Auto-Dismiss E2E Tests', () => {
   it('renders multi-attachment chips with individual remove buttons and triggers clear-all', () => {
@@ -73,7 +77,8 @@ describe('Chat, Screen Capture, Multi-Attachments & Auto-Dismiss E2E Tests', () 
     expect(screen.queryByText(/project-horizon — VS Code/i)).toBeNull();
   });
 
-  it('dynamically opens VS Code when user inputs "open vs"', () => {
+  it('reports a real dispatch failure without fabricating a launched app', async () => {
+    vi.spyOn(agentClient, 'executeTask').mockRejectedValue(new Error('Agent unavailable'));
     render(<App />);
 
     const input = screen.getByPlaceholderText(/Ask Gemini/i);
@@ -82,9 +87,9 @@ describe('Chat, Screen Capture, Multi-Attachments & Auto-Dismiss E2E Tests', () 
     const generateBtn = screen.getByText('Generate');
     fireEvent.click(generateBtn);
 
-    // VS Code window should now dynamically appear in active apps
-    expect(screen.getByText('project-horizon — VS Code')).toBeDefined();
-    expect(screen.getByText('// src/shaders/liquid.frag')).toBeDefined();
+    await waitFor(() => expect(screen.getByText('Error executing task: Agent unavailable')).toBeDefined());
+    expect(screen.queryByText('project-horizon — VS Code')).toBeNull();
+    expect(screen.queryByText(/Successfully resolved workspace/i)).toBeNull();
   });
 
   it('auto-dismisses chat bar when clicking desktop workspace without any chat, and provides summon option', () => {
@@ -94,7 +99,7 @@ describe('Chat, Screen Capture, Multi-Attachments & Auto-Dismiss E2E Tests', () 
     expect(screen.getByPlaceholderText(/Ask Gemini/i)).toBeDefined();
 
     // Click desktop workspace backdrop
-    const workspace = screen.getByText(/Multimodal Windows Desktop Agent/i).closest('main');
+    const workspace = screen.getByRole('main');
     expect(workspace).toBeDefined();
 
     // Click summon / shortcut hint to verify re-summoning works
@@ -104,6 +109,8 @@ describe('Chat, Screen Capture, Multi-Attachments & Auto-Dismiss E2E Tests', () 
   });
 
   it('displays past chats in sidebar and allows user to continue a conversation thread', () => {
+    seedConversations();
+    vi.spyOn(agentClient, 'executeTask').mockResolvedValue({ sessionId: 'test', taskPrompt: 'follow up', status: 'done', currentNarration: 'Follow-up completed', steps: [] });
     render(<App />);
 
     // Verify Past Chats sidebar renders

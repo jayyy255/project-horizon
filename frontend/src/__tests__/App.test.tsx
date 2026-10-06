@@ -7,7 +7,7 @@ describe('Project Horizon Production App Suite', () => {
   it('renders production header with Horizon title (no dev chrome)', () => {
     render(<App />);
     expect(screen.getAllByText('Project Horizon').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('Multimodal Windows Desktop Agent')).toBeDefined();
+    expect(screen.getAllByText('Your desktop, in context').length).toBeGreaterThan(0);
 
     // Confirm dev buttons & badges are strictly NOT rendered
     expect(screen.queryByText(/Backend: Connected/i)).toBeNull();

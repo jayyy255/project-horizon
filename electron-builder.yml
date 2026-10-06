@@ -4,25 +4,26 @@ copyright: Copyright © 2026 Project Horizon
 
 directories:
   output: release
-  buildResources: build
+  buildResources: assets
 
 files:
   - "dist-electron/**/*"
   - "frontend/dist/**/*"
   - "package.json"
+  - "assets/**/*"
 
 extraResources:
-  - from: "backend/perception-service"
+  - from: "release/staging/perception-service"
     to: "perception-service"
     filter:
       - "**/*"
       - "!**/__pycache__"
       - "!**/.pytest_cache"
-  - from: ".env"
-    to: ".env"
+  - from: "release/staging/native"
+    to: "native"
 
 win:
-  icon: "build/icon.ico"
+  icon: "assets/icon.ico"
   target:
     - target: dir
       arch:
@@ -30,7 +31,7 @@ win:
     - target: nsis
       arch:
         - x64
-  artifactName: "${productName}-Setup-${version}.${ext}"
+  artifactName: "Project-Horizon-Setup-${version}-${arch}.${ext}"
 
 
 nsis:

@@ -1,6 +1,14 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import App from '../App';
+import { seedConversations } from './fixtures';
+import { agentClient } from '../services/agentClient';
+
+beforeEach(() => {
+  localStorage.clear();
+  vi.restoreAllMocks();
+  vi.spyOn(agentClient, 'executeTask').mockResolvedValue({ sessionId: 'test', taskPrompt: 'test', status: 'done', currentNarration: 'Task completed', steps: [] });
+});
 
 describe('Project Horizon Frontend E2E User Journey & Safety Gating Flows', () => {
   it('Flow 1: Interacts with the Contextual Prompt Bar in production workspace and dispatches tasks', () => {
@@ -15,10 +23,11 @@ describe('Project Horizon Frontend E2E User Journey & Safety Gating Flows', () =
     fireEvent.click(generateBtn);
 
     // Verify confirmation feedback
-    expect(screen.getByText(/Dispatched task to Gemini 2.5/i)).toBeDefined();
+    expect(screen.getByText(/Task submitted to Horizon/i)).toBeDefined();
   });
 
   it('Flow 2: Interacts with the Chat History Sidebar and session switching in production workspace', () => {
+    seedConversations();
     render(<App />);
 
     // Verify past chat sessions are listed in the sidebar
@@ -69,7 +78,7 @@ describe('Project Horizon Frontend E2E User Journey & Safety Gating Flows', () =
     fireEvent.click(consentLink);
 
     // Check for First-Run Consent Modal
-    expect(screen.getByText('Google Gemini Multimodal Authorization')).toBeDefined();
+    expect(screen.getByRole('dialog')).toBeDefined();
 
     // Check the mandatory authorization checkbox
     const checkbox = screen.getByRole('checkbox');
@@ -78,15 +87,15 @@ describe('Project Horizon Frontend E2E User Journey & Safety Gating Flows', () =
     fireEvent.click(checkbox);
     expect((checkbox as HTMLInputElement).checked).toBe(true);
 
-    // Find and click Enable Agent button
-    const enableBtn = screen.getByText('Enable Agent');
+    // Continue requires explicit consent.
+    const enableBtn = screen.getByText('Continue');
     fireEvent.click(enableBtn);
 
     // Consent modal completes and dismisses
-    expect(screen.queryByText('Google Gemini Multimodal Authorization')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('Flow 5: Settings and preferences suite tab switching and hotkey cycling from production sidebar', () => {
+  it('Flow 5: Settings and preferences suite tab switching and hotkey cycling from production sidebar', async () => {
     render(<App />);
 
     // Open Settings Suite from sidebar preferences button
@@ -99,7 +108,7 @@ describe('Project Horizon Frontend E2E User Journey & Safety Gating Flows', () =
     // Cycle Hotkey
     const cycleBtn = screen.getByText('Cycle Hotkey');
     fireEvent.click(cycleBtn);
-    expect(screen.getByText('Ctrl + Space')).toBeDefined();
+    await waitFor(() => expect(screen.getByText('Ctrl + Space')).toBeDefined());
 
     // Switch to Project Roots tab
     const rootsTab = screen.getByText('Project Roots');
@@ -109,6 +118,6 @@ describe('Project Horizon Frontend E2E User Journey & Safety Gating Flows', () =
     // Switch to Inference Engine tab
     const backendTab = screen.getByText('Inference Engine');
     fireEvent.click(backendTab);
-    expect(screen.getByText('Inference Engine Hardware')).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Inference Engine' })).toBeDefined();
   });
 });

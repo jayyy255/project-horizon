@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { createRequire } from 'module';
+import { resolveSqlite } from './sqlite';
 
 export interface GraphNode {
   id: string;
@@ -19,18 +19,6 @@ export interface GraphEdge {
   metadata?: Record<string, unknown>;
 }
 
-function resolveSqlite() {
-  try {
-    return require('better-sqlite3');
-  } catch {
-    try {
-      const agentReq = createRequire(path.resolve(__dirname, '../../../backend/agent-service/package.json'));
-      return agentReq('better-sqlite3');
-    } catch {
-      return null;
-    }
-  }
-}
 
 export class SystemKnowledgeGraph {
   private db: any = null;
@@ -80,8 +68,8 @@ export class SystemKnowledgeGraph {
 
       CREATE INDEX IF NOT EXISTS idx_nodes_type ON graph_nodes(type);
       CREATE INDEX IF NOT EXISTS idx_nodes_name ON graph_nodes(name);
-      CREATE INDEX IF NOT EXISTS idx_edges_source ON graph_edges(sourceId);
-      CREATE INDEX IF NOT EXISTS idx_edges_target ON graph_edges(targetId);
+      CREATE INDEX IF NOT EXISTS idx_edges_source ON graph_edges(source_id);
+      CREATE INDEX IF NOT EXISTS idx_edges_target ON graph_edges(target_id);
     `);
   }
 

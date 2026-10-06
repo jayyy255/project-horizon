@@ -41,6 +41,11 @@ export interface DesktopCaptureData {
 }
 
 export interface HorizonAPI {
+  getGeminiStatus?: () => Promise<{ configured: boolean }>;
+  saveGeminiKey?: (key: string) => Promise<{ configured: boolean }>;
+  getWorkspaceRoots?: () => Promise<string[]>;
+  addWorkspaceRoot?: () => Promise<string[]>;
+  getPerceptionHealth?: () => Promise<{ status: string; backend?: string }>;
   captureDesktop: () => Promise<DesktopCaptureData>;
   getDesktopSources: () => Promise<Array<{ id: string; name: string }>>;
   onDesktopCaptured: (callback: (data: DesktopCaptureData) => void) => () => void;
@@ -54,7 +59,7 @@ export interface HorizonAPI {
   sendTier2Decision: (actionId: string, authorized: boolean) => Promise<void>;
   getSystemInfo: () => Promise<SystemInfo>;
   // In-process ReAct Agent methods (Step 4c)
-  executeTask: (payload: { prompt: string; sessionId?: string; images?: string[] }) => Promise<any>;
+  executeTask: (payload: { prompt: string; sessionId?: string; images?: string[]; history?: Array<{role: 'user' | 'assistant'; text: string}> }) => Promise<any>;
   resolveTier2: (payload: { actionId: string; authorized: boolean }) => Promise<any>;
   getAgentState: () => Promise<any>;
   searchIndexer: (payload: { query: string; limit?: number }) => Promise<any[]>;

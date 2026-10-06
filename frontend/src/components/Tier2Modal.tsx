@@ -82,7 +82,7 @@ export const Tier2Modal: React.FC<Tier2ModalProps> = ({
       {/* Non-Repudiation Notice */}
       <div className="mt-3.5 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
         <ShieldCheck size={14} className="text-[#438BC4] flex-shrink-0" />
-        <span>Cryptographically signed &amp; preserved in local SQLite audit vault</span>
+        <span>Your approval decision is recorded in the local audit history.</span>
       </div>
 
       {/* Action Buttons */}
