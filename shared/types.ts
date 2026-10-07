@@ -1,3 +1,5 @@
+import type { HotkeyResult, HotkeyStatus } from './hotkeys';
+
 export interface SystemInfo {
   platform: string;
   arch: string;
@@ -41,8 +43,8 @@ export interface DesktopCaptureData {
 }
 
 export interface HorizonAPI {
-  getGeminiStatus?: () => Promise<{ configured: boolean }>;
-  saveGeminiKey?: (key: string) => Promise<{ configured: boolean }>;
+  getGeminiStatus?: () => Promise<{ configured: boolean; ownerProvided?: boolean }>;
+  saveGeminiKey?: (key: string) => Promise<{ configured: boolean; ownerProvided?: boolean }>;
   getWorkspaceRoots?: () => Promise<string[]>;
   addWorkspaceRoot?: () => Promise<string[]>;
   getPerceptionHealth?: () => Promise<{ status: string; backend?: string }>;
@@ -65,9 +67,12 @@ export interface HorizonAPI {
   searchIndexer: (payload: { query: string; limit?: number }) => Promise<any[]>;
   onAgentStateUpdate: (callback: (state: any) => void) => () => void;
   onPanicAbort: (callback: (panicEvent: any) => void) => () => void;
-  approveHotkey?: (hotkey?: string) => Promise<{ success: boolean; hotkey?: string; error?: string }>;
+  approveHotkey?: (hotkey?: string) => Promise<HotkeyResult>;
+  getHotkeyStatus?: () => Promise<HotkeyStatus>;
+  onHotkeyStatus?: (callback: (status: HotkeyStatus) => void) => () => void;
   openMainWindow?: () => Promise<void>;
   hideFloatingBar?: () => Promise<void>;
+  resizeFloatingBar?: (height: number) => Promise<void>;
   toggleFloatingBar?: () => Promise<void>;
   triggerCapture?: () => Promise<void>;
 }

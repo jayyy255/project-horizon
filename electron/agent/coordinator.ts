@@ -13,6 +13,7 @@ import { ModelRouter, ModelCircuitBreaker } from './router';
 import { CommandCache } from './cache';
 import { agentDataPath } from './sqlite';
 import { parseProjectOpen } from './workspaces';
+import { RequestLimiter } from './rateLimit';
 
 export interface ReActStep {
   stepIndex: number;
@@ -59,6 +60,7 @@ export class AgentCoordinator {
   private reflexiveMatcher: ReflexiveMatcher = new ReflexiveMatcher();
   private modelRouter: ModelRouter = new ModelRouter();
   private commandCache: CommandCache;
+  private requestLimiter = new RequestLimiter(agentDataPath('ai-request-usage.json'));
 
   constructor(
     safetyGate: SafetyGate,
@@ -799,13 +801,15 @@ export class AgentCoordinator {
     }
 
     const model = selection.model;
+    const allowance = this.requestLimiter.take();
+    if (!allowance.allowed) return { error: allowance.error };
     const hostname = 'generativelanguage.googleapis.com';
     const startTime = performance.now();
 
     console.log(`[Model Router] Routed to ${model} (tier: ${selection.tier}, canary: ${selection.isCanary})`);
 
     try {
-      const url = `https://${hostname}/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const url = `https://${hostname}/v1beta/models/${model}:generateContent`;
       const systemInstruction = this.modelRouter.getSystemInstruction(model);
 
       const historySummary = state.steps.map(s =>
@@ -840,12 +844,13 @@ export class AgentCoordinator {
 
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: systemInstruction + '\nAttached images are already captured observations. For a question about an attached image, answer from that image. If the user asks for an answer without desktop tools, return final_answer and do not propose a tool.' }] },
           contents: [{ role: 'user', parts }],
           generationConfig: {
             temperature: 0.1,
+            maxOutputTokens: 4096,
             responseMimeType: 'application/json'
           }
         }),
@@ -857,6 +862,7 @@ export class AgentCoordinator {
 
       if (!res.ok) {
         this.modelRouter.getCircuitBreaker().recordFailure(model);
+        if (res.status === 429) return { error: 'Gemini usage is temporarily limited. Please try again shortly.' };
         const errText = await res.text().catch(() => '');
         console.warn(`[Gemini Live HTTP] Non-200 response (${res.status}): ${errText.substring(0, 150)}. Engaging Ollama fallback.`);
         return null;

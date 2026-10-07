@@ -27,8 +27,16 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { useHorizonAgent } from './hooks/useHorizonAgent';
+import { useHotkeyStatus } from './hooks/useHotkeyStatus';
+import { HOTKEY_OPTIONS } from '@shared/hotkeys';
 
 export default function App() {
+  // A floating window owns its agent subscription and conversation state.
+  if (window.location.hash.includes('bar')) return <FloatingBarWindow isDarkMode={localStorage.getItem('horizon_theme') !== 'light'} />;
+  return <DesktopWorkspace />;
+}
+
+function DesktopWorkspace() {
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('horizon_theme') !== 'light');
   const feedRef = useRef<HTMLDivElement>(null);
   const executionSessionRef = useRef('');
@@ -39,6 +47,9 @@ export default function App() {
   const [showTier2Modal, setShowTier2Modal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showConsentModal, setShowConsentModal] = useState(false);
+  const [savingConsent, setSavingConsent] = useState(false);
+  const [consentError, setConsentError] = useState('');
+  const { status: hotkeyStatus, loading: hotkeyLoading, error: hotkeyError, register: registerHotkey } = useHotkeyStatus();
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
 
   // Real Desktop Screenshot state from Electron desktopCapturer
@@ -106,27 +117,30 @@ export default function App() {
     }
   }, [activeSessionId]);
 
-  // Automatic Hotkey Setup & Consent on first run
+  // Main-process settings restore the shortcut before the renderer loads.
+  // Migrate existing 1.1.0 approvals once, retaining the user's chosen shortcut.
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.localStorage) {
+    if (!hotkeyLoading && !window.location.hash && !hotkeyStatus.approved) {
       const approved = localStorage.getItem('horizon_hotkey_approved');
       if (approved !== 'true' && import.meta.env.MODE !== 'test' && !window.location.hash) {
         setShowConsentModal(true);
-      } else if (approved === 'true' && !window.location.hash) {
-        const shortcut = localStorage.getItem('horizon_hotkey');
-        window.horizonAPI?.approveHotkey?.(shortcut === 'Ctrl + Space' ? 'CommandOrControl+Space' : 'Super+Shift+C');
+      } else if (approved === 'true' && window.horizonAPI?.getHotkeyStatus) {
+        const saved = HOTKEY_OPTIONS.find(option => option.label === localStorage.getItem('horizon_hotkey'));
+        void registerHotkey(saved?.accelerator).catch(() => setConsentError('Could not restore your shortcut. Open Preferences to retry.'));
       }
     }
-  }, []);
+  }, [hotkeyLoading, hotkeyStatus.approved]);
 
-  const handleConsentGiven = () => {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      localStorage.setItem('horizon_hotkey_approved', 'true');
-    }
-    if (typeof window !== 'undefined' && (window as any).horizonAPI?.approveHotkey) {
-      (window as any).horizonAPI.approveHotkey('Super+Shift+C');
-    }
-    setShowConsentModal(false);
+  const handleConsentGiven = async () => {
+    setSavingConsent(true); setConsentError('');
+    try {
+      if (window.horizonAPI?.approveHotkey) {
+        const result = await registerHotkey();
+        if (!result.approved) { setConsentError(result.error || 'Could not save setup. Please try again.'); return; }
+      } else localStorage.setItem('horizon_hotkey_approved', 'true');
+      setShowConsentModal(false);
+    } catch (error) { setConsentError(error instanceof Error ? error.message : 'Could not finish setup.'); }
+    finally { setSavingConsent(false); }
   };
 
   // Keep the main window and the floating bar on the same persisted conversation.
@@ -218,35 +232,9 @@ export default function App() {
     }
   }, []);
 
-  const handleTriggerCapture = async () => {
-    if (window.horizonAPI?.triggerCapture) {
-      await window.horizonAPI.triggerCapture();
-      return;
-    }
-    if (typeof window !== 'undefined' && window.horizonAPI) {
-      try {
-        const data = await window.horizonAPI.captureDesktop();
-        setRealScreenshotUrl(data.dataUrl);
-        setCaptureDisplayInfo({
-          width: data.width,
-          height: data.height,
-          scaleFactor: data.scaleFactor,
-          label: data.displayLabel,
-        });
-      } catch (err) {
-        console.warn('Could not capture desktop via horizonAPI:', err);
-      }
-    }
-    setIsCaptureActive(true);
-  };
-
-  // Global Hotkey Listener: Win/Ctrl + Shift + C for Shortcut Summon & Screen Select
+  // Global summon shortcuts belong to the main process. Keep only local dismiss.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
-        e.preventDefault();
-        handleTriggerCapture();
-      }
       if (e.key === 'Escape') {
         if (sessionState?.pendingTier2) submitTier2Decision(sessionState.pendingTier2.actionId, false).catch(() => {});
         setIsCaptureActive(false);
@@ -568,7 +556,7 @@ export default function App() {
               ))}
             </div>
             <div className="sidebar-footer">
-              <div className="shortcut-card"><div className="shortcut-icon"><Camera size={18} /></div><div><strong>Your desktop, in context</strong><span>Summon Horizon from anywhere</span></div><kbd>Win+Shift+C</kbd></div>
+              <div className="shortcut-card"><div className="shortcut-icon"><Camera size={18} /></div><div><strong>Your desktop, in context</strong><span>{hotkeyStatus.active ? 'Summon Horizon from anywhere' : 'Shortcut not active'}</span></div><kbd>{hotkeyStatus.label.replaceAll(' ', '')}</kbd></div>
               <button className="sidebar-utility" onClick={() => setShowSettingsModal(true)} title="Open Preferences & Controls"><Sliders size={16} />Preferences</button>
               <button className="sidebar-utility" onClick={() => setShowHistoryDrawer(true)} title="Open Session History"><History size={16} />Session history</button>
               <div className="sidebar-bottom"><button onClick={() => setShowConsentModal(true)}>Privacy Agreement</button><span><ShieldCheck size={12} />Local history</span></div>
@@ -604,6 +592,7 @@ export default function App() {
           <div className="composer-dock">
             {(sessionState || isExecuting) && <div className="trace-dock">{isTraceExpanded && <div className="trace-expanded"><ReActTracePanel isDarkMode={isDarkMode} steps={liveTraceSteps} onClose={() => setIsTraceExpanded(false)} /></div>}<HUDCollapsedChip isDarkMode={isDarkMode} isExpanded={isTraceExpanded} onToggleLogs={() => setIsTraceExpanded(prev => !prev)} currentNarration={sessionState?.currentNarration} status={sessionState?.status} /></div>}
             {lastError && <p role="alert" className="text-xs text-rose-400 mb-2">{lastError}</p>}
+            {(hotkeyError || consentError) && !showConsentModal && <div role="alert" className="text-xs text-rose-300 mb-3">{hotkeyError || consentError} <button className="underline" onClick={() => setShowSettingsModal(true)}>Open Preferences</button></div>}
             <ContextualPromptBar isDarkMode={isDarkMode} attachments={attachments} onRemoveAttachment={handleRemoveAttachment} onClearAttachments={handleClearAttachments} onTriggerLasso={handleTriggerLasso} onTriggerFullScreen={handleQuickFullScreenCapture} onSubmitPrompt={handleTaskSubmit} isBusy={isExecuting || sessionState?.status === 'awaiting_tier2'} />
             <div className="composer-hint"><span>Give it context. Let Horizon help.</span><span><kbd>Enter</kbd> to send · <kbd>Shift + Enter</kbd> for a new line</span></div>
           </div>
@@ -658,6 +647,8 @@ export default function App() {
           <div className="relative">
             <FirstRunConsentModal 
               isDarkMode={isDarkMode} 
+              isBusy={savingConsent}
+              error={consentError}
               onConsentGiven={handleConsentGiven}
               onConsentDeclined={() => setShowConsentModal(false)}
             />

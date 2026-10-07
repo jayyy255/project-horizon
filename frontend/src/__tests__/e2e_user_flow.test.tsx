@@ -5,6 +5,7 @@ import { seedConversations } from './fixtures';
 import { agentClient } from '../services/agentClient';
 
 beforeEach(() => {
+  delete window.horizonAPI;
   localStorage.clear();
   vi.restoreAllMocks();
   vi.spyOn(agentClient, 'executeTask').mockResolvedValue({ sessionId: 'test', taskPrompt: 'test', status: 'done', currentNarration: 'Task completed', steps: [] });
@@ -96,6 +97,7 @@ describe('Project Horizon Frontend E2E User Journey & Safety Gating Flows', () =
   });
 
   it('Flow 5: Settings and preferences suite tab switching and hotkey cycling from production sidebar', async () => {
+    window.horizonAPI = { onDesktopCaptured: () => () => {}, onOverlayToggled: () => () => {}, onAreaAttached: () => () => {}, approveHotkey: vi.fn().mockResolvedValue({ success: true, approved: true, active: true, accelerator: 'CommandOrControl+Space', label: 'Ctrl + Space' }) } as any;
     render(<App />);
 
     // Open Settings Suite from sidebar preferences button
@@ -119,5 +121,6 @@ describe('Project Horizon Frontend E2E User Journey & Safety Gating Flows', () =
     const backendTab = screen.getByText('Inference Engine');
     fireEvent.click(backendTab);
     expect(screen.getByRole('heading', { name: 'Inference Engine' })).toBeDefined();
+    delete window.horizonAPI;
   });
 });

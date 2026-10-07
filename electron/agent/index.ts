@@ -58,9 +58,7 @@ export class AgentHost {
   }
 
   private broadcastState(state: ReActSessionState): void {
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send('horizon:agent-state-update', state);
-    }
+    for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.send('horizon:agent-state-update', state);
   }
 
   private registerIpcHandlers(): void {
@@ -85,9 +83,14 @@ export class AgentHost {
         return await response.json();
       } catch { return { status: 'offline' }; }
     });
+    // A small user-submit cooldown prevents double submissions; local project
+    // commands do not consume the separate Gemini model request budget.
+    let lastSubmission = 0;
     // 1. Execute task
     ipcMain.handle('horizon:execute-task', async (_event, payload: { prompt: string; sessionId?: string; images?: string[]; history?: Array<{role: 'user' | 'assistant'; text: string}> }) => {
       const sessionId = payload.sessionId || `sess-${Date.now()}`;
+      if (Date.now() - lastSubmission < 1500) throw new Error('Please wait a moment before sending another request.');
+      lastSubmission = Date.now();
       try {
         console.log(`[AgentHost] Executing task: "${payload.prompt}" (Session: ${sessionId}, Images: ${payload.images?.length || 0})`);
         return await this.coordinator.executeTask(sessionId, payload.prompt, undefined, payload.images, payload.history);

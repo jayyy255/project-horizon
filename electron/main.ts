@@ -15,6 +15,10 @@ import { spawn } from 'child_process';
 import { AgentHost } from './agent';
 import { runPackagedVerification } from './packagedVerification';
 import { loadGeminiKey, getGeminiStatus, saveGeminiKey } from './settings';
+import { HotkeyManager } from './hotkeys';
+
+const ownsSingleInstance = app.requestSingleInstanceLock();
+if (!ownsSingleInstance) app.quit();
 
 function loadEnvFile(envPath: string) {
   try {
@@ -57,6 +61,25 @@ let tray: Tray | null = null;
 let agentHost: AgentHost | null = null;
 let isOverlayVisible = false;
 let isBarVisible = false;
+let hotkeyManager: HotkeyManager;
+let isQuitting = false;
+
+app.on('before-quit', () => { isQuitting = true; });
+app.on('second-instance', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) createMainWindow();
+  if (mainWindow?.isMinimized()) mainWindow.restore();
+  mainWindow?.show();
+  mainWindow?.focus();
+});
+
+function syncDismissShortcut(): void {
+  if (isOverlayVisible || isBarVisible) {
+    if (!globalShortcut.isRegistered('Escape')) globalShortcut.register('Escape', () => {
+      hideOverlay();
+      hideFloatingBar();
+    });
+  } else if (globalShortcut.isRegistered('Escape')) globalShortcut.unregister('Escape');
+}
 
 let lastCapturedData: {
   dataUrl: string;
@@ -207,6 +230,9 @@ function createMainWindow(): BrowserWindow {
     agentHost.setMainWindow(mainWindow);
   }
 
+  mainWindow.on('close', event => {
+    if (!isQuitting) { event.preventDefault(); mainWindow?.hide(); }
+  });
   mainWindow.on('closed', () => {
     mainWindow = null;
     agentHost?.setMainWindow(null);
@@ -275,6 +301,7 @@ async function triggerRealCaptureAndShowOverlay(): Promise<void> {
     isOverlayVisible = true;
     overlayWindow?.show();
     overlayWindow?.focus();
+    syncDismissShortcut();
 
     const tReady = performance.now();
     console.log(`[Project Horizon] Real desktop capture -> overlay ready in ${(tReady - t0).toFixed(2)} ms`);
@@ -287,6 +314,7 @@ function hideOverlay(): void {
   const t0 = performance.now();
   isOverlayVisible = false;
   overlayWindow?.hide();
+  syncDismissShortcut();
   const t1 = performance.now();
   console.log(`[Project Horizon] Overlay dismissed in ${(t1 - t0).toFixed(2)} ms`);
 }
@@ -304,14 +332,15 @@ function createBarWindow(): BrowserWindow {
     return barWindow;
   }
   const primaryDisplay = screen.getPrimaryDisplay();
-  const { width: screenWidth, height: screenHeight, y: screenY } = primaryDisplay.workArea;
+  const { width: screenWidth, height: screenHeight, x: screenX, y: screenY } = primaryDisplay.workArea;
 
   const barWidth = 760;
-  const barHeight = 136;
-  const x = Math.round((screenWidth - barWidth) / 2);
+  const barHeight = 176;
+  const x = screenX + Math.round((screenWidth - barWidth) / 2);
   const y = screenY + screenHeight - barHeight - 20; // 20px docked above Windows taskbar
 
   barWindow = new BrowserWindow({
+    title: 'Project Horizon — Floating Assistant',
     x,
     y,
     width: barWidth,
@@ -332,6 +361,7 @@ function createBarWindow(): BrowserWindow {
     },
   });
 
+  barWindow.on('page-title-updated', event => event.preventDefault());
   loadWindowContent(barWindow, 'bar');
 
   barWindow.on('closed', () => {
@@ -349,6 +379,7 @@ function showFloatingBar(): void {
   barWindow?.show();
   barWindow?.focus();
   isBarVisible = true;
+  syncDismissShortcut();
 }
 
 function hideFloatingBar(): void {
@@ -356,6 +387,7 @@ function hideFloatingBar(): void {
     barWindow.hide();
   }
   isBarVisible = false;
+  syncDismissShortcut();
 }
 
 function toggleFloatingBar(): void {
@@ -387,9 +419,15 @@ function setupSystemTray(): void {
   tray = new Tray(brandIcon.isEmpty() ? iconCanvas : brandIcon.resize({ width: 16, height: 16 }));
   tray.setToolTip('Project Horizon — Windows Desktop Agent');
 
+  refreshTrayMenu();
+  tray.on('click', () => { toggleFloatingBar(); });
+}
+
+function refreshTrayMenu(): void {
+  const shortcut = hotkeyManager?.getStatus();
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Summon Floating Bar (Win+Shift+C)',
+      label: `Summon Floating Bar${shortcut?.active ? ` (${shortcut.label})` : ''}`,
       click: () => toggleFloatingBar(),
     },
     {
@@ -421,10 +459,7 @@ function setupSystemTray(): void {
     },
   ]);
 
-  tray.setContextMenu(contextMenu);
-  tray.on('click', () => {
-    toggleFloatingBar();
-  });
+  tray?.setContextMenu(contextMenu);
 }
 
 function spawnPerceptionServiceIfNeeded(): void {
@@ -472,6 +507,7 @@ function spawnPerceptionServiceIfNeeded(): void {
 }
 
 app.whenReady().then(async () => {
+  if (!ownsSingleInstance) return;
   loadGeminiKey();
   ipcMain.handle('horizon:get-gemini-status', () => getGeminiStatus());
   ipcMain.handle('horizon:save-gemini-key', (_event, key: string) => saveGeminiKey(key));
@@ -483,6 +519,8 @@ app.whenReady().then(async () => {
 
   spawnPerceptionServiceIfNeeded();
   agentHost = new AgentHost();
+  hotkeyManager = new HotkeyManager(path.join(app.getPath('userData'), 'hotkey-settings.json'), globalShortcut, toggleFloatingBar);
+  hotkeyManager.restore();
   createMainWindow();
   createOverlayWindow();
   setupSystemTray();
@@ -491,37 +529,13 @@ app.whenReady().then(async () => {
     agentHost.setMainWindow(mainWindow);
   }
 
-  // Register Escape dismiss handler
-  globalShortcut.register('Escape', () => {
-    if (isOverlayVisible) {
-      console.log('[Project Horizon] ESC pressed -> closing capture overlay');
-      hideOverlay();
-    } else if (isBarVisible) {
-      console.log('[Project Horizon] ESC pressed -> closing floating bar');
-      hideFloatingBar();
-    }
-  });
-
   // Setup IPC Handlers
+  ipcMain.handle('horizon:get-hotkey-status', () => hotkeyManager.getStatus());
   ipcMain.handle('horizon:approve-hotkey', (_event, customHotkey?: string) => {
-    const hotkeys = customHotkey ? [customHotkey] : ['CommandOrControl+Shift+C', 'Super+Shift+C'];
-    let registeredCount = 0;
-    for (const hk of hotkeys) {
-      try {
-        if (globalShortcut.isRegistered(hk)) registeredCount++;
-        else {
-          const registered = globalShortcut.register(hk, () => {
-            console.log(`[Project Horizon] Global Hotkey (${hk}) triggered floating bar`);
-            toggleFloatingBar();
-          });
-          if (registered) registeredCount++;
-        }
-      } catch (err) {
-        console.warn(`[Project Horizon] Could not register ${hk}:`, err);
-      }
-    }
-    console.log(`[Project Horizon] Hotkey approval confirmed: ${registeredCount} registered`);
-    return { success: registeredCount > 0, count: registeredCount, error: registeredCount ? undefined : 'This shortcut is already used by another application.' };
+    const result = hotkeyManager.approve(customHotkey);
+    refreshTrayMenu();
+    for (const win of BrowserWindow.getAllWindows()) win.webContents.send('horizon:hotkey-status', hotkeyManager.getStatus());
+    return result;
   });
 
   ipcMain.handle('horizon:open-main-window', () => {
@@ -537,6 +551,14 @@ app.whenReady().then(async () => {
   ipcMain.handle('horizon:hide-floating-bar', () => {
     hideFloatingBar();
     return false;
+  });
+
+  ipcMain.handle('horizon:resize-floating-bar', (event, requestedHeight: number) => {
+    if (!barWindow || event.sender !== barWindow.webContents || !Number.isFinite(requestedHeight)) return;
+    const area = screen.getDisplayMatching(barWindow.getBounds()).workArea;
+    const height = Math.round(Math.max(176, Math.min(requestedHeight, 560, area.height - 40)));
+    const bounds = barWindow.getBounds();
+    barWindow.setBounds({ ...bounds, height, y: area.y + area.height - height - 20 });
   });
 
   ipcMain.handle('horizon:toggle-floating-bar', () => {

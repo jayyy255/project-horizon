@@ -4,12 +4,14 @@ import { HorizonMark } from './HorizonMark';
 
 interface FirstRunConsentModalProps {
   isDarkMode: boolean;
+  isBusy?: boolean;
+  error?: string;
   onConsentGiven?: () => void;
   onConsentDeclined?: () => void;
 }
 
 export const FirstRunConsentModal: React.FC<FirstRunConsentModalProps> = ({
-  isDarkMode, onConsentGiven, onConsentDeclined,
+  isDarkMode, isBusy, error, onConsentGiven, onConsentDeclined,
 }) => {
   const [agreed, setAgreed] = useState(false);
 
@@ -35,7 +37,8 @@ export const FirstRunConsentModal: React.FC<FirstRunConsentModalProps> = ({
       </div>
       <footer className="consent-footer">
         <label className="consent-agreement"><input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} /><span>I agree to send my prompts and selected screen context to Google Gemini.</span></label>
-        <div className="consent-actions"><button className="consent-secondary" onClick={onConsentDeclined}>Not now</button><button className="consent-primary" disabled={!agreed} onClick={() => { if (agreed) onConsentGiven?.(); }}>Continue<ArrowRight size={15} /></button></div>
+        {error && <p role="alert" className="text-xs text-rose-400 mt-3">{error}</p>}
+        <div className="consent-actions"><button className="consent-secondary" disabled={isBusy} onClick={onConsentDeclined}>Not now</button><button className="consent-primary" disabled={!agreed || isBusy} onClick={() => { if (agreed) onConsentGiven?.(); }}>{isBusy ? 'Setting up…' : 'Continue'}<ArrowRight size={15} /></button></div>
       </footer>
     </section>
   );

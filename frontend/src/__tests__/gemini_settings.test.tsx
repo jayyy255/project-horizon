@@ -4,6 +4,12 @@ import { SettingsPreferencesSuite } from '../components/SettingsPreferencesSuite
 
 afterEach(() => { delete window.horizonAPI; });
 describe('Installer Gemini setup', () => {
+  it('does not ask friends for a key when owner access is included', async () => {
+    window.horizonAPI = { getGeminiStatus: vi.fn().mockResolvedValue({configured:true,ownerProvided:true}) } as any;
+    render(<SettingsPreferencesSuite isDarkMode />); fireEvent.click(screen.getByRole('button', {name:'Inference Engine'}));
+    await waitFor(() => expect(screen.getByText('Gemini access included')).toBeDefined());
+    expect(screen.queryByLabelText('Gemini API key')).toBeNull();
+  });
   it('saves through desktop IPC without retaining the key in the input or local storage', async () => {
     const save = vi.fn().mockResolvedValue({ configured: true });
     window.horizonAPI = { getGeminiStatus: vi.fn().mockResolvedValue({configured:false}), saveGeminiKey: save } as any;

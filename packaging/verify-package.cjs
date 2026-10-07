@@ -10,7 +10,8 @@ const resources = path.join(root, 'resources');
 const profile = path.join(repo, 'scratch/package-smoke');
 const cwd = path.join(profile, 'cwd-outside-checkout');
 fs.mkdirSync(cwd, { recursive: true });
-const report = { version: '1.1.0', checks: [], rendererErrors: [] };
+const version = require('../package.json').version;
+const report = { version, checks: [], rendererErrors: [] };
 function check(name, passed, details) {
   report.checks.push({ name, passed: Boolean(passed), details });
   if (!passed) throw new Error(name);
@@ -59,7 +60,7 @@ async function renderer(expression) {
     socket.addEventListener('message', event=>{const response=JSON.parse(event.data);const item=pending.get(response.id);if(item){clearTimeout(item.timer);pending.delete(response.id);response.error?item.reject(new Error(response.error.message)):item.resolve(response.result);}});
     await until(() => renderer('Boolean(window.horizonAPI && document.querySelector(".horizon-app"))'));
     const identity = await evaluate(`({packaged:process.mainModule.require('electron').app.isPackaged,version:process.mainModule.require('electron').app.getVersion(),userdata:process.mainModule.require('electron').app.getPath('userData')})`);
-    check('Actual packaged 1.1.0 executable launches', identity.packaged && identity.version==='1.1.0', identity);
+    check('Actual packaged executable launches', identity.packaged && identity.version===version, identity);
     check('Verification uses an isolated profile', identity.userdata.toLowerCase().startsWith(profile.toLowerCase()+path.sep));
     check('Fresh install has no bundled Gemini credential', !(await renderer('window.horizonAPI.getGeminiStatus()')).configured);
     await evaluate(`process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>/index.html$/.test(w.webContents.getURL())).webContents.on('console-message', (_e,level,message)=>{if(level===3)globalThis.__horizonSmokeErrors=(globalThis.__horizonSmokeErrors||[]).concat(message);})`);

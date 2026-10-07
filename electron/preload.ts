@@ -71,8 +71,15 @@ contextBridge.exposeInMainWorld('horizonAPI', {
   setEnvVar: (key: string, value: string) => ipcRenderer.invoke('horizon:set-env-var', { key, value }),
   resetCircuitBreaker: (model?: string) => ipcRenderer.invoke('horizon:reset-circuit-breaker', model),
   approveHotkey: (hotkey?: string) => ipcRenderer.invoke('horizon:approve-hotkey', hotkey),
+  getHotkeyStatus: () => ipcRenderer.invoke('horizon:get-hotkey-status'),
+  onHotkeyStatus: (callback: (status: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status);
+    ipcRenderer.on('horizon:hotkey-status', handler);
+    return () => ipcRenderer.removeListener('horizon:hotkey-status', handler);
+  },
   openMainWindow: () => ipcRenderer.invoke('horizon:open-main-window'),
   hideFloatingBar: () => ipcRenderer.invoke('horizon:hide-floating-bar'),
+  resizeFloatingBar: (height: number) => ipcRenderer.invoke('horizon:resize-floating-bar', height),
   toggleFloatingBar: () => ipcRenderer.invoke('horizon:toggle-floating-bar'),
   triggerCapture: () => ipcRenderer.invoke('horizon:trigger-capture'),
 });

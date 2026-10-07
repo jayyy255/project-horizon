@@ -9,17 +9,18 @@ async function main() {
   const root = path.resolve(__dirname, '..');
   process.chdir(root);
   const version = require('../package.json').version;
+  const friends = process.argv.includes('--friends');
   const tag = `v${version}`;
   const repository = 'jayyy255/project-horizon';
-  const installerName = `Project-Horizon-Setup-${version}-x64.exe`;
+  const installerName = `Project-Horizon-${friends ? 'Friends-' : ''}Setup-${version}-x64.exe`;
   const installer = path.join(root, 'release', installerName);
   const git = (args) => execFileSync('git', args, { encoding: 'utf8', windowsHide: true }).trim();
   const commit = git(['rev-parse', 'HEAD']);
   if (git(['status', '--porcelain'])) throw new Error('Commit the source before publishing.');
   const remoteHead = git(['ls-remote', 'origin', 'refs/heads/main']).split(/\s+/)[0];
   if (remoteHead !== commit) throw new Error('Push this commit to origin/main before publishing.');
-  const report = JSON.parse(fs.readFileSync(path.join(root, 'release', 'package-verification.json'), 'utf8'));
-  if (report.version !== version || report.passed !== true || report.checks?.length !== 12
+  const report = JSON.parse(fs.readFileSync(path.join(root, 'release', friends ? 'package-verification-friends.json' : 'package-verification.json'), 'utf8'));
+  if (report.version !== version || report.passed !== true || report.checks?.length < (friends ? 16 : 12)
     || report.checks.some((check) => check.passed !== true)) {
     throw new Error('The packaged smoke checks must pass before publishing.');
   }
@@ -49,9 +50,12 @@ async function main() {
     if (!response.ok) throw new Error(`GitHub API ${response.status} for ${endpoint}`);
     return response.json();
   };
-  const notes = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8').replace(/^# Changes\s*/, '')
-    + '\n\nDownload the x64 setup executable below. Run the setup wizard, approve first-run consent, '
-    + 'then enter your own Gemini API key in Preferences → Inference Engine. '
+  const repositoryInfo = await api('');
+  if (friends && !repositoryInfo.private) throw new Error('The friends installer may only be published to the private repository.');
+  const notes = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8').replace(/^# Changes\s*/, '').split(/\n## /)[0]
+    + '\n\nDownload the x64 setup executable below. Run the setup wizard and approve first-run consent. '
+    + (friends ? 'This temporary friends build includes owner-provided Gemini access; users do not enter an API key. Keep this installer private. '
+      : 'Enter your own Gemini API key in Preferences → Inference Engine. ')
     + 'Python and the perception models are included; no separate Python installation is needed.\n\n'
     + `SHA-256: \`${checksum}\`\n`;
   let release = await api(`/releases/tags/${tag}`, { allowMissing: true });

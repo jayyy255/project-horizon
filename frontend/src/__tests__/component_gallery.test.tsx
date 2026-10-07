@@ -67,7 +67,7 @@ describe('Project Horizon Isolated Component Specifications (Dev Gallery Suite)'
 
   it('renders SettingsPreferencesSuite with tab controls and hotkey manager', () => {
     render(<SettingsPreferencesSuite isDarkMode={true} />);
-    expect(screen.getByText('Screen Capture Hotkey')).toBeDefined();
+    expect(screen.getByText('Floating Assistant Hotkey')).toBeDefined();
     expect(screen.getByText('Cycle Hotkey')).toBeDefined();
     expect(screen.getByText('Project Roots')).toBeDefined();
   });

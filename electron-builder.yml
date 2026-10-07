@@ -21,6 +21,8 @@ extraResources:
       - "!**/.pytest_cache"
   - from: "release/staging/native"
     to: "native"
+  - from: "release/staging/app-access"
+    to: "app-access"
 
 win:
   icon: "assets/icon.ico"

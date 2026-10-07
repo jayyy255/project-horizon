@@ -19,13 +19,13 @@
 
 ## 📖 Overview
 
-**Project Horizon** is a multimodal Windows desktop assistant for asking about selected screen context, finding projects, and launching applications. Version 1.1.0 uses a glass interface, JetBrains Mono, the Horizon app icon, and restrained pixel accents.
+**Project Horizon** is a multimodal Windows desktop assistant for asking about selected screen context, finding projects, and launching applications. Version 1.1.1 uses a glass interface, JetBrains Mono, the Horizon app icon, and restrained pixel accents. Questions and follow-ups can be answered directly in the floating assistant.
 
-When launched, Project Horizon automatically registers the global desktop shortcut (`Win + Shift + C` or `Ctrl + Shift + C`) upon your approval. From that point on, Horizon acts as a dedicated desktop AI chatbot app where you can review all past conversations, continue existing threads, and circle or inspect any open application, document, or screen region.
+After approval, Horizon registers the selected global shortcut, saves it in native app settings, and restores it on restart. Preferences show its actual availability. Closing the workspace keeps Horizon in the tray; use the tray's Quit command to stop it.
 
 ### Key Capabilities
 1. **Conversational AI Mode Chatbot**: Native, edge-to-edge desktop cockpit modeled after the Google Search AI Mode experience. View all past chat threads in the left sidebar, seamlessly continue previous discussions, and initiate new multimodal investigations with full context memory.
-2. **One-Click Hotkey Approval (`Win + Shift + C`)**: Prompts on first startup to automatically bind the global shortcut. Press the hotkey from any game, browser, IDE, or document to instantly freeze the desktop and lasso any UI element.
+2. **Floating Assistant (`Win + Shift + C`)**: Summon Horizon over your current app, ask a question, and read the answer in the same bar. Select screen context when needed and ask follow-ups without opening the full workspace. Preferences also offer `Ctrl + Space` and `Ctrl + Alt + H` when a shortcut is unavailable.
 3. **Air-Gapped Local Perception (Set-of-Marks)**: Runs an on-device YOLOv8n ONNX neural network and RapidOCR engine on `http://127.0.0.1:4200` using a silent, windowless background worker (`pythonw.exe` with zero console popups). Detects interactive buttons, input fields, containers, and text tags (`[0]`, `[1]`, `[2]...`) with zero screen data egress.
 4. **Direct Desktop Commands**: Simple app launches and screen capture use deterministic intent matching. Project-opening requests resolve an indexed folder and pass it directly to VS Code, like Explorer's Open with Code. Missing or ambiguous projects return clear errors.
 5. **Two-Tier Human-in-the-Loop Safety Gate**: Read-only actions run autonomously (Tier 1), while destructive operations (file deletions, disk modifications, arbitrary shell executions) unconditionally pause for explicit human approval via a secure modal (Tier 2).
@@ -41,24 +41,27 @@ Project Horizon is distributed as a packaged desktop application for 64-bit Wind
 
 ### 1. Download the Desktop Package
 Download the latest Windows installer or standalone package from the [GitHub Releases](https://github.com/jayyy255/project-horizon/releases) page:
-- **Installer**: `Project-Horizon-Setup-1.1.0-x64.exe` with a per-user setup wizard, installation-directory choice, desktop shortcut and Start menu entry.
+- **Private friends installer**: `Project-Horizon-Friends-Setup-1.1.1-x64.exe`, with owner-provided Gemini access and no user key setup. It uses a per-user wizard, installation-directory choice, desktop shortcut and Start menu entry.
 - Python, perception models and the native window verifier are bundled. End users do not need Node.js, Python, Miniconda or a source checkout.
-- The installer contains no developer `.env` file or API key. It is currently unsigned.
+- Both build types exclude `.env` files and are currently unsigned. The explicitly opted-in friends build includes the owner's Gemini credential in its resources; keep that artifact private. The ordinary `package:win` build excludes owner credentials.
 
 ### 2. Launch & Approve Hotkey
-1. Run the downloaded `Project-Horizon-Setup-1.1.0-x64.exe`.
+1. Run the downloaded setup executable.
 2. On first launch, Horizon will prompt for your authorization to register the global desktop shortcut:
-   - **Default Hotkey**: `Win + Shift + C`; Preferences can switch to `Ctrl + Space`.
+   - **Default Hotkey**: `Win + Shift + C`; Preferences can switch to `Ctrl + Space` or `Ctrl + Alt + H`.
    - **Privacy Boundary**: Horizon never passively records your screen; screen buffers are captured exclusively when you press the hotkey or select a region.
 3. Read the first-run disclosures, select the consent checkbox, and click **Continue**. The shortcut registers after that choice.
-4. Open **Preferences → Inference Engine**, paste your own [Gemini API key](https://aistudio.google.com/apikey), and click **Save key**. The key is encrypted for your Windows account and can be replaced or removed there.
+4. The friends build shows **Gemini access included** in Preferences → Inference Engine. No user API key is needed. In a standard build, a user can save a personal key with Windows-backed encryption.
 5. If your projects are outside the discovered locations, add their parent folder in **Preferences → Project Roots**.
 
 ### 3. Using Horizon as Your AI Chatbot
 - **View Past Chats**: All prior questions, code explanations, and automation summaries appear in the **Past Chats** sidebar with timestamps, turn counts, and crop thumbnails.
 - **Continue Any Conversation**: Click any past session to load its full message stream, review previous answers, and type follow-up questions.
 - **Start a New Chat**: Click the **"+ New Chat"** button at the top of the sidebar.
-- **Circle-to-Search**: Press `Win + Shift + C` anywhere in Windows to bring up the transparent lasso canvas, draw a boundary around what you want explained or automated, and press Enter to query Horizon AI.
+- **Floating answers**: Press the selected hotkey, type a prompt and press Enter. The bar grows to display the response and retains context for follow-ups. Expand into the workspace only when desired.
+- **Circle-to-Search**: Use the floating bar's context menu to select a screen region, then ask about it in the same bar.
+
+The temporary friends build applies local limits of 10 Gemini model calls per minute and 100 per rolling 24 hours, saved across restarts. Each planning turn consumes a call. Requests have a brief submit cooldown and capped output length. These local limits can be bypassed by someone who extracts the bundled key; shared server enforcement is planned when hosting is selected. Google's project-level quotas remain the provider-side limits.
 
 ---
 
