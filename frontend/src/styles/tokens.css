@@ -28,39 +28,46 @@
 
 :root {
   /* Colors */
-  --color-cosmic-cream: #FFF8E7;
+  --color-cosmic-cream: #ffffff;
   --color-celestial: #8CC1E9;
   --color-cerulean: #438BC4;
   --color-cobalt: #0055A0;
-  --color-navy: #12284B;
+  --color-navy: #181818;
   --color-signal-cyan: #3FE0E8;
   
-  --color-carbon-950: #07080a;
-  --color-carbon-900: #090a0d;
-  --color-carbon-850: #0e1117;
-  --color-carbon-800: #12151c;
+  --color-carbon-950: #050505;
+  --color-carbon-900: #080808;
+  --color-carbon-850: #111111;
+  --color-carbon-800: #181818;
 
   --color-tier2-amber: #F59E0B;
   --color-error-red: #EF4444;
   
   /* Defaults (Dark Mode) */
   --bg-app: var(--color-carbon-900);
-  --text-primary: var(--color-cosmic-cream);
-  --text-secondary: rgba(255, 248, 231, 0.65);
+  --text-primary: #f5f5f5;
+  --text-secondary: #999999;
+  --surface: rgba(255,255,255,.035);
+  --surface-hover: rgba(255,255,255,.065);
+  --border: rgba(255,255,255,.09);
+  --muted: var(--text-secondary);
+  --foreground: var(--text-primary);
+  --accent: #8cc1e9;
+  --panel-shadow: 0 12px 38px rgba(0,0,0,.14), inset 0 1px 0 rgba(255,255,255,.035);
   
   /* Glass Material (Dark) */
-  --glass-base-bg: rgba(9, 10, 13, 0.6);
-  --glass-base-border: rgba(140, 193, 233, 0.1);
+  --glass-base-bg: rgba(8,8,8,.65);
+  --glass-base-border: var(--border);
   --glass-base-blur: blur(24px) saturate(180%);
   --glass-base-top-edge: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
   
-  --glass-raised-bg: rgba(14, 17, 23, 0.75);
-  --glass-raised-border: rgba(140, 193, 233, 0.15);
+  --glass-raised-bg: rgba(17,17,17,.92);
+  --glass-raised-border: var(--border);
   --glass-raised-blur: blur(32px) saturate(190%);
   --glass-raised-top-edge: inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
 
-  --glass-floating-bg: rgba(18, 21, 28, 0.85);
-  --glass-floating-border: rgba(140, 193, 233, 0.25);
+  --glass-floating-bg: rgba(10,10,10,.94);
+  --glass-floating-border: var(--border);
   --glass-floating-blur: blur(40px) saturate(200%);
   --glass-floating-top-edge: inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
 
@@ -81,21 +88,26 @@
 }
 
 .light-mode {
-  --bg-app: #f8fafc;
-  --text-primary: var(--color-navy);
-  --text-secondary: rgba(18, 40, 75, 0.65);
+  --bg-app: #ffffff;
+  --text-primary: #181818;
+  --text-secondary: #686868;
+  --surface: rgba(255,255,255,.75);
+  --surface-hover: rgba(0,0,0,.035);
+  --border: rgba(0,0,0,.08);
+  --accent: #1674b4;
+  --panel-shadow: 0 12px 38px rgba(0,0,0,.045), inset 0 1px 0 rgba(255,255,255,.8);
   
   /* Glass Material (Light) - White-tinted glass */
   --glass-base-bg: rgba(255, 255, 255, 0.6);
-  --glass-base-border: rgba(18, 40, 75, 0.1);
+  --glass-base-border: var(--border);
   --glass-base-top-edge: inset 0 1px 0 0 rgba(255, 255, 255, 0.8);
   
-  --glass-raised-bg: rgba(255, 255, 255, 0.75);
-  --glass-raised-border: rgba(18, 40, 75, 0.15);
+  --glass-raised-bg: rgba(255,255,255,.94);
+  --glass-raised-border: var(--border);
   --glass-raised-top-edge: inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
 
-  --glass-floating-bg: rgba(255, 255, 255, 0.9);
-  --glass-floating-border: rgba(18, 40, 75, 0.2);
+  --glass-floating-bg: rgba(255,255,255,.96);
+  --glass-floating-border: var(--border);
   --glass-floating-top-edge: inset 0 1px 0 0 rgba(255, 255, 255, 1);
 }
 

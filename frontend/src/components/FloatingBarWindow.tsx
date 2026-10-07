@@ -88,7 +88,7 @@ export function FloatingBarWindow({ isDarkMode }: { isDarkMode: boolean }) {
   };
 
   return <div className={`floating-bar ${isDarkMode ? '' : 'light-mode'} w-full h-full p-2 flex flex-col justify-end bg-transparent`}>
-    <div ref={panel} className={`floating-panel w-full rounded-2xl border shadow-2xl backdrop-blur-2xl ${isDarkMode ? 'bg-[#101720]/95 text-slate-100 border-slate-500/25' : 'bg-white/95 text-slate-900 border-slate-400/25'}`}>
+    <div ref={panel} className="floating-panel w-full backdrop-blur-2xl">
       <header className="floating-header"><div className="flex items-center gap-2"><HorizonMark size={23} /><span>Horizon</span>{busy && <span className="floating-thinking">Thinking…</span>}</div><div className="flex items-center gap-1">
         <button disabled={busy || Boolean(approval)} onClick={() => { conversation.current = null; setMessages([]); setAttachments([]); }} aria-label="New floating conversation" title="New question"><Plus size={15} /></button>
         <button onClick={() => void window.horizonAPI?.openMainWindow?.()} aria-label="Open workspace" title="Open workspace"><Maximize2 size={14} /></button>

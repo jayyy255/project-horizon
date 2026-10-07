@@ -1,5 +1,13 @@
 # Changes
 
+## 1.1.2
+
+- White light mode and black dark mode share neutral glass surfaces, legible foregrounds and restrained blue accents from the Horizon logo. Preferences, consent, history and execution details follow the palette.
+- Removed the nested prompt frame. The floating assistant has one continuous glass surface and transparent native corners instead of an opaque rectangular page background.
+- Floating and capture windows follow theme changes from the workspace without reopening.
+
+Validation: 39 frontend regressions, eight native theme checks and 24 packaged checks passed, including transparent corner pixels, borderless composers and live light/dark synchronization. Actual native screenshots were inspected in both modes. The private friends installer retains included Gemini access and local request limits.
+
 ## 1.1.1
 
 - Global shortcut settings live in the main process, restore on restart, expose actual registration status and report conflicts. Changing shortcuts releases the previous binding. The workspace closes into the tray, and duplicate app instances return to the existing window.

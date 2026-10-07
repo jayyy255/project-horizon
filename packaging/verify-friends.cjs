@@ -110,6 +110,16 @@ async function send(prompt) {
     const bounds = await evaluate(`process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>/#bar$/.test(w.webContents.getURL())).getBounds()`);
     check('Floating window grows to fit answers', bounds.height > 176 && bounds.height <= 560, bounds);
     fs.writeFileSync(path.join(profile, 'floating-answers.png'), Buffer.from(await evaluate(`process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>/#bar$/.test(w.webContents.getURL())).webContents.capturePage().then(image=>image.toPNG().toString('base64'))`), 'base64'));
+    check('Floating shell is transparent with no nested prompt frame', await renderer(`getComputedStyle(document.body).backgroundColor==='rgba(0, 0, 0, 0)'&&getComputedStyle(document.querySelector('.prompt-surface')).borderTopWidth==='0px'`, true));
+    check('Packaged native floating corners have zero alpha', await evaluate(`process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>/#bar$/.test(w.webContents.getURL())).webContents.capturePage().then(image=>image.toBitmap()[3]===0)`));
+    const toggleTheme = `[...document.querySelectorAll('button')].find(button=>button.getAttribute('aria-label')==='Toggle Light / Dark Mode').click()`;
+    await renderer(toggleTheme);
+    await until(() => renderer(`document.documentElement.classList.contains('light-mode')`, true));
+    check('Packaged floating assistant follows white light theme live', await renderer(`document.querySelector('.floating-bar').classList.contains('light-mode')&&getComputedStyle(document.documentElement).getPropertyValue('--bg-app').trim()==='#ffffff'`, true));
+    fs.writeFileSync(path.join(profile, 'floating-answers-light.png'), Buffer.from(await evaluate(`process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>/#bar$/.test(w.webContents.getURL())).webContents.capturePage().then(image=>image.toPNG().toString('base64'))`), 'base64'));
+    await renderer(toggleTheme);
+    await until(() => renderer(`document.documentElement.classList.contains('dark')`, true));
+    check('Packaged floating assistant returns to black dark theme live', await renderer(`!document.querySelector('.floating-bar').classList.contains('light-mode')&&getComputedStyle(document.documentElement).getPropertyValue('--bg-app').trim()==='#080808'`, true));
     // Exercise real capture IPC with a synthetic image, without collecting the user's desktop.
     const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jN3sAAAAASUVORK5CYII=';
     await evaluate(`process.mainModule.require('electron').desktopCapturer.getSources=async()=>[{id:'screen:synthetic',name:'Synthetic test display',thumbnail:process.mainModule.require('electron').nativeImage.createFromDataURL(${JSON.stringify(pixel)})}];true`);

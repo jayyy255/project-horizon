@@ -17,10 +17,10 @@ interface ReActTracePanelProps {
   onClose?: () => void;
 }
 
-export const ReActTracePanel: React.FC<ReActTracePanelProps> = ({ 
-  isDarkMode, 
+export const ReActTracePanel: React.FC<ReActTracePanelProps> = ({
+  isDarkMode,
   steps: customSteps,
-  onClose 
+  onClose
 }) => {
   const [copied, setCopied] = useState(false);
   const [openAccordion, setOpenAccordion] = useState<number[]>([1, 2]);
@@ -28,7 +28,7 @@ export const ReActTracePanel: React.FC<ReActTracePanelProps> = ({
   const steps = customSteps || [];
 
   const toggleAccordion = (stepId: number) => {
-    setOpenAccordion(prev => 
+    setOpenAccordion(prev =>
       prev.includes(stepId) ? prev.filter(i => i !== stepId) : [...prev, stepId]
     );
   };
@@ -40,7 +40,7 @@ export const ReActTracePanel: React.FC<ReActTracePanelProps> = ({
   };
 
   return (
-    <div 
+    <div
       className={`w-[580px] max-w-full rounded-3xl border shadow-2xl p-5 sm:p-6 relative overflow-hidden transition-all ${
         isDarkMode ? 'liquid-glass-dark text-slate-100 border-[#8CC1E9]/35' : 'liquid-glass-light text-slate-900 border-[#8CC1E9]/35'
       }`}
@@ -48,12 +48,12 @@ export const ReActTracePanel: React.FC<ReActTracePanelProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between pb-3.5 border-b border-slate-200/80 dark:border-slate-800/80 mb-4">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-[#12284B] text-[#FFF8E7] border border-[#8CC1E9]/40 flex items-center justify-center shadow-md">
+          <div className="w-8 h-8 rounded-xl bg-[#181818] text-[#FFFFFF] border border-[#8CC1E9]/40 flex items-center justify-center shadow-md">
             <GeminiSparkle size={16} />
           </div>
           <div>
             <div className="text-xs font-bold horizon-gradient-text tracking-wide">Activity details</div>
-            <div className="text-[11px] text-slate-500 dark:text-slate-400">Desktop agent · {steps.length} Actions</div>
+            <div className="text-[11px] text-slate-500 dark:text-[var(--muted)]">Desktop agent · {steps.length} Actions</div>
           </div>
         </div>
 
@@ -68,7 +68,7 @@ export const ReActTracePanel: React.FC<ReActTracePanelProps> = ({
           {onClose && (
             <button
               onClick={onClose}
-              className="p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-200"
+              className="p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-[#222222] text-[var(--muted)] hover:text-[var(--foreground)]"
             >
               ×
             </button>
@@ -76,7 +76,7 @@ export const ReActTracePanel: React.FC<ReActTracePanelProps> = ({
         </div>
       </div>
 
-      {/* Timeline Steps: #8CC1E9 -> #438BC4 -> #0055A0 -> #FFF8E7 */}
+      {/* Timeline Steps: #8CC1E9 -> #438BC4 -> #0055A0 -> #FFFFFF */}
       <div className="trace-timeline">
         {steps.map((step) => {
           const isOpen = openAccordion.includes(step.id);
@@ -87,28 +87,28 @@ export const ReActTracePanel: React.FC<ReActTracePanelProps> = ({
 
               {/* Step Card */}
               <div className={`p-3.5 rounded-2xl border transition-all ${
-                isDarkMode 
-                  ? 'bg-[#12151c]/75 border-slate-800 hover:border-[#8CC1E9]/50' 
+                isDarkMode
+                  ? 'bg-[#151515]/75 border-slate-800 hover:border-[#8CC1E9]/50'
                   : 'bg-slate-50/70 border-slate-200/90 hover:border-[#438BC4]/50 shadow-sm'
               }`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="font-mono font-bold text-[#0055A0] dark:text-[#8CC1E9]">Step {step.id}: {step.toolName}</span>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                      step.status === 'succeeded' 
-                        ? 'bg-[#8CC1E9]/15 text-[#0055A0] dark:text-[#8CC1E9] border border-[#8CC1E9]/35' 
-                        : 'bg-[#FFF8E7]/25 text-[#12284B] dark:text-[#FFF8E7] border border-[#438BC4]/40'
+                      step.status === 'succeeded'
+                        ? 'bg-[#8CC1E9]/15 text-[#0055A0] dark:text-[#8CC1E9] border border-[#8CC1E9]/35'
+                        : 'bg-[#FFFFFF]/25 text-[#181818] dark:text-[#FFFFFF] border border-[#438BC4]/40'
                     }`}>
                       {step.status}
                     </span>
                   </div>
-                  <span className="font-mono text-[10px] text-slate-400">{step.duration}</span>
+                  <span className="font-mono text-[10px] text-[var(--muted)]">{step.duration}</span>
                 </div>
 
                 {/* Parameters Display */}
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {Object.entries(step.params || {}).map(([k, v]) => (
-                    <span key={k} className="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800">
+                    <span key={k} className="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-white dark:bg-[#181818] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800">
                       <span className="text-[#0055A0] dark:text-[#8CC1E9] font-semibold">{k}:</span> {String(v)}
                     </span>
                   ))}
@@ -118,7 +118,7 @@ export const ReActTracePanel: React.FC<ReActTracePanelProps> = ({
                 <div className="mt-2.5 pt-2 border-t border-slate-200/70 dark:border-slate-800/80">
                   <button
                     onClick={() => toggleAccordion(step.id)}
-                    className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-[#0055A0] dark:hover:text-[#8CC1E9] transition-colors"
+                    className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-[var(--muted)] hover:text-[#0055A0] dark:hover:text-[#8CC1E9] transition-colors"
                   >
                     {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                     <span>Why this action</span>

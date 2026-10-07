@@ -122,9 +122,7 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
 
       {/* Main Glassmorphic Chat Bar */}
       <div 
-        className={`prompt-surface w-full transition-all relative ${
-          isDarkMode ? 'liquid-glass-dark text-slate-100 border-[#8CC1E9]/40' : 'liquid-glass-light text-slate-900 border-[#8CC1E9]/45'
-        }`}
+        className="prompt-surface w-full transition-all relative"
       >
         <div className="prompt-layout">
           {/* Main Prompt Input */}
@@ -167,7 +165,7 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
             {/* Screen Capture Dropdown Menu */}
             {showCaptureMenu && (
               <div className={`absolute right-0 bottom-full mb-2 w-52 rounded-2xl border p-1.5 shadow-2xl backdrop-blur-xl z-50 animate-slide-up ${
-                isDarkMode ? 'bg-[#0f141c]/95 border-slate-700 text-slate-200' : 'bg-white/95 border-slate-200 text-slate-800'
+                isDarkMode ? 'bg-[#111111]/95 border-slate-700 text-slate-200' : 'bg-white/95 border-slate-200 text-slate-800'
               }`}>
                 <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400 px-2.5 py-1">
                   Capture Screen

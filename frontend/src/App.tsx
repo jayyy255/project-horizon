@@ -28,16 +28,22 @@ import {
 } from 'lucide-react';
 import { useHorizonAgent } from './hooks/useHorizonAgent';
 import { useHotkeyStatus } from './hooks/useHotkeyStatus';
+import { useHorizonTheme } from './hooks/useHorizonTheme';
 import { HOTKEY_OPTIONS } from '@shared/hotkeys';
 
 export default function App() {
   // A floating window owns its agent subscription and conversation state.
-  if (window.location.hash.includes('bar')) return <FloatingBarWindow isDarkMode={localStorage.getItem('horizon_theme') !== 'light'} />;
+  if (window.location.hash.includes('bar')) return <FloatingAssistantRoute />;
   return <DesktopWorkspace />;
 }
 
+function FloatingAssistantRoute() {
+  const { isDarkMode } = useHorizonTheme();
+  return <FloatingBarWindow isDarkMode={isDarkMode} />;
+}
+
 function DesktopWorkspace() {
-  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('horizon_theme') !== 'light');
+  const { isDarkMode, setIsDarkMode } = useHorizonTheme();
   const feedRef = useRef<HTMLDivElement>(null);
   const executionSessionRef = useRef('');
   
@@ -445,22 +451,6 @@ function DesktopWorkspace() {
       }));
     }
   };
-
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-      document.documentElement.classList.remove('light-mode');
-      document.body.classList.remove('bg-[#ffffff]', 'text-slate-900');
-      document.body.classList.add('bg-[#090a0d]', 'text-slate-100');
-    } else {
-      document.documentElement.classList.remove('dark');
-      document.documentElement.classList.add('light-mode');
-      document.body.classList.remove('bg-[#090a0d]', 'text-slate-100');
-      document.body.classList.add('bg-[#ffffff]', 'text-slate-900');
-    }
-    localStorage.setItem('horizon_theme', isDarkMode ? 'dark' : 'light');
-    document.body.style.background = window.location.hash.includes('bar') ? 'transparent' : '';
-  }, [isDarkMode]);
 
   useEffect(() => {
     if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;

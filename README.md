@@ -19,7 +19,7 @@
 
 ## 📖 Overview
 
-**Project Horizon** is a multimodal Windows desktop assistant for asking about selected screen context, finding projects, and launching applications. Version 1.1.1 uses a glass interface, JetBrains Mono, the Horizon app icon, and restrained pixel accents. Questions and follow-ups can be answered directly in the floating assistant.
+**Project Horizon** is a multimodal Windows desktop assistant for asking about selected screen context, finding projects, and launching applications. Version 1.1.2 uses white and black glass themes with restrained blue accents, JetBrains Mono, the Horizon app icon, and restrained pixel accents. Questions and follow-ups can be answered directly in the floating assistant.
 
 After approval, Horizon registers the selected global shortcut, saves it in native app settings, and restores it on restart. Preferences show its actual availability. Closing the workspace keeps Horizon in the tray; use the tray's Quit command to stop it.
 
@@ -41,7 +41,7 @@ Project Horizon is distributed as a packaged desktop application for 64-bit Wind
 
 ### 1. Download the Desktop Package
 Download the latest Windows installer or standalone package from the [GitHub Releases](https://github.com/jayyy255/project-horizon/releases) page:
-- **Private friends installer**: `Project-Horizon-Friends-Setup-1.1.1-x64.exe`, with owner-provided Gemini access and no user key setup. It uses a per-user wizard, installation-directory choice, desktop shortcut and Start menu entry.
+- **Private friends installer**: `Project-Horizon-Friends-Setup-1.1.2-x64.exe`, with owner-provided Gemini access and no user key setup. It uses a per-user wizard, installation-directory choice, desktop shortcut and Start menu entry.
 - Python, perception models and the native window verifier are bundled. End users do not need Node.js, Python, Miniconda or a source checkout.
 - Both build types exclude `.env` files and are currently unsigned. The explicitly opted-in friends build includes the owner's Gemini credential in its resources; keep that artifact private. The ordinary `package:win` build excludes owner credentials.
 
