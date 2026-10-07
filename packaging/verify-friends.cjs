@@ -110,6 +110,18 @@ async function send(prompt) {
     const bounds = await evaluate(`process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>/#bar$/.test(w.webContents.getURL())).getBounds()`);
     check('Floating window grows to fit answers', bounds.height > 176 && bounds.height <= 560, bounds);
     fs.writeFileSync(path.join(profile, 'floating-answers.png'), Buffer.from(await evaluate(`process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>/#bar$/.test(w.webContents.getURL())).webContents.capturePage().then(image=>image.toPNG().toString('base64'))`), 'base64'));
+    // Exercise real capture IPC with a synthetic image, without collecting the user's desktop.
+    const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jN3sAAAAASUVORK5CYII=';
+    await evaluate(`process.mainModule.require('electron').desktopCapturer.getSources=async()=>[{id:'screen:synthetic',name:'Synthetic test display',thumbnail:process.mainModule.require('electron').nativeImage.createFromDataURL(${JSON.stringify(pixel)})}];true`);
+    const overlay = expression => evaluate(`process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>/#capture$/.test(w.webContents.getURL())).webContents.executeJavaScript(${JSON.stringify(expression)})`);
+    await renderer('window.__testCaptureCount=0;window.horizonAPI.onAreaAttached(()=>window.__testCaptureCount++);true');
+    await renderer('window.horizonAPI.triggerCapture()', true);
+    await overlay(`window.horizonAPI.attachArea(${JSON.stringify({type:'crop',label:'Synthetic crop',croppedDataUrl:pixel,coords:{x:0,y:0,w:1,h:1}})})`);
+    await until(() => renderer(`Boolean(document.querySelector('img[alt="Crop preview"]'))`, true));
+    check('Circle selection returns to the floating bar while workspace is open', await evaluate(`process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>/#bar$/.test(w.webContents.getURL())).isVisible()`) && (await renderer('window.__testCaptureCount')) === 0);
+    await renderer('window.horizonAPI.triggerCapture()', true);
+    await overlay('window.horizonAPI.closeOverlay()');
+    check('Cancelling circle selection restores the floating bar', await evaluate(`process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>/#bar$/.test(w.webContents.getURL())).isVisible()`));
     const session = { profile, inspector: 'http://127.0.0.1:9232', pid: child.pid, stopFile: path.join(profile, 'finish.json') };
     fs.writeFileSync(path.join(repo, 'release/friends-verification-session.json'), JSON.stringify(session));
     if (process.argv.includes('--keep-open')) {
@@ -121,6 +133,7 @@ async function send(prompt) {
     report.passed = true;
   } catch (error) { report.error = error.stack; report.passed = false; }
   finally {
+    if (child && socket) await stopApp().catch(() => child?.kill());
     for (const item of pending.values()) clearTimeout(item.timer);
     socket?.close(); child?.kill(); worker?.kill();
     fs.writeFileSync(path.join(repo, 'release/package-verification-friends.json'), JSON.stringify(report, null, 2));

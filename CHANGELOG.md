@@ -3,11 +3,11 @@
 ## 1.1.1
 
 - Global shortcut settings live in the main process, restore on restart, expose actual registration status and report conflicts. Changing shortcuts releases the previous binding. The workspace closes into the tray, and duplicate app instances return to the existing window.
-- Floating assistant displays full answers, errors and approvals in place, grows to fit them, and keeps follow-ups in one conversation. Users can choose to expand into the workspace.
+- Floating assistant displays full answers, errors and approvals in place, grows to fit them, and keeps follow-ups in one conversation. Users can choose to expand into the workspace. Circle selection and cancellation return to the requesting floating bar, even with the workspace open.
 - Private friends build optionally includes owner-provided Gemini access, with no user API-key entry. Standard builds continue to exclude owner credentials. Both newer Google auth keys and legacy key formats are accepted.
 - Local fair-use limits persist across restarts: 10 model calls per minute, 100 per rolling 24 hours, a brief submit cooldown and 4096 output tokens per call. Google 429 errors are shown clearly. Local limits do not prevent use of an extracted key.
 
-Validation: 39 frontend tests, 33 production Electron regressions and 16 hotkey/rate-limit regressions passed. 21 packaged-runtime and physical keyboard checks passed, including live Gemini answers and follow-up context. Ctrl + Alt + H was tested with Horizon and Chrome focused; the Win shortcut was checked through native registration. The installer remains unsigned.
+Validation: 39 frontend tests, 33 production Electron regressions and 16 hotkey/rate-limit regressions passed. 23 packaged-runtime and physical keyboard checks passed, including live Gemini answers and follow-up context. Ctrl + Alt + H was tested with Horizon and Chrome focused; the Win shortcut was checked through native registration. The installer remains unsigned.
 
 ## 1.1.0
 

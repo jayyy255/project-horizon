@@ -48,6 +48,7 @@ async function main() {
     });
     if (response.status === 404 && options.allowMissing) return null;
     if (!response.ok) throw new Error(`GitHub API ${response.status} for ${endpoint}`);
+    if (response.status === 204) return null;
     return response.json();
   };
   const repositoryInfo = await api('');
@@ -66,14 +67,20 @@ async function main() {
     }) });
   }
   if (release.target_commitish !== commit && release.draft) {
-    throw new Error('An existing draft points to a different source commit.');
+    const expectedNames = [installerName, 'SHA256SUMS.txt'];
+    if (release.assets.some(asset => !expectedNames.includes(asset.name))) throw new Error('The draft contains unrelated assets.');
+    // Replace only this unpublished installer draft after a local rebuild.
+    for (const asset of release.assets) await api(`/releases/assets/${asset.id}`, { method: 'DELETE' });
+    release = await api(`/releases/${release.id}`, { method: 'PATCH', body: JSON.stringify({ target_commitish: commit, body: notes }) });
   }
+  if (release.target_commitish !== commit) throw new Error('The published release points to another source commit.');
   for (const file of [installer, checksumFile]) {
     const name = path.basename(file);
     const size = fs.statSync(file).size;
     const existing = release.assets.find((asset) => asset.name === name);
     if (existing) {
-      if (existing.size !== size || existing.state !== 'uploaded') throw new Error(`Existing asset differs: ${name}`);
+      const digest = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+      if (existing.size !== size || existing.state !== 'uploaded' || existing.digest !== `sha256:${digest}`) throw new Error(`Existing asset differs: ${name}`);
       console.log(`Already uploaded: ${name}`);
       continue;
     }

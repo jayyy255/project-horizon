@@ -61,10 +61,12 @@ let tray: Tray | null = null;
 let agentHost: AgentHost | null = null;
 let isOverlayVisible = false;
 let isBarVisible = false;
+let captureTarget: 'floating' | 'workspace' = 'workspace';
 let hotkeyManager: HotkeyManager;
 let isQuitting = false;
+let perceptionWorker: ReturnType<typeof spawn> | null = null;
 
-app.on('before-quit', () => { isQuitting = true; });
+app.on('before-quit', () => { isQuitting = true; perceptionWorker?.kill(); });
 app.on('second-instance', () => {
   if (!mainWindow || mainWindow.isDestroyed()) createMainWindow();
   if (mainWindow?.isMinimized()) mainWindow.restore();
@@ -323,6 +325,9 @@ function toggleOverlay(): void {
   if (isOverlayVisible) {
     hideOverlay();
   } else {
+    captureTarget = mainWindow?.isVisible() ? 'workspace' : 'floating';
+    if (captureTarget === 'floating') createBarWindow();
+    hideFloatingBar();
     triggerRealCaptureAndShowOverlay();
   }
 }
@@ -440,7 +445,7 @@ function refreshTrayMenu(): void {
     },
     {
       label: 'Screen Capture (Lasso)',
-      click: () => triggerRealCaptureAndShowOverlay(),
+      click: () => toggleOverlay(),
     },
     { type: 'separator' },
     {
@@ -495,11 +500,12 @@ function spawnPerceptionServiceIfNeeded(): void {
         console.log(`[Project Horizon] Launching background Perception Microservice from ${srvScript} on port 4200...`);
         const child = spawn(pyExe, [srvScript], {
           cwd: path.dirname(srvScript),
-          detached: true,
+          detached: false,
           stdio: 'ignore',
           windowsHide: true,
           env: { ...process.env, PYTHONHOME: '', PYTHONPATH: '', PYTHONDONTWRITEBYTECODE: '1' },
         });
+        perceptionWorker = child;
         child.on('error', error => console.warn('[Project Horizon] Perception worker could not start:', error.message));
         child.unref();
       }
@@ -566,7 +572,8 @@ app.whenReady().then(async () => {
     return isBarVisible;
   });
 
-  ipcMain.handle('horizon:trigger-capture', async () => {
+  ipcMain.handle('horizon:trigger-capture', async (event) => {
+    captureTarget = event.sender === barWindow?.webContents ? 'floating' : 'workspace';
     hideFloatingBar();
     await triggerRealCaptureAndShowOverlay();
     return true;
@@ -593,15 +600,18 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('horizon:close-overlay', () => {
     hideOverlay();
+    if (captureTarget === 'floating') showFloatingBar();
     return false;
   });
 
   ipcMain.handle('horizon:attach-area', (_event, data) => {
     console.log('[Project Horizon] Area attached from overlay:', data?.type, data?.coords);
-    mainWindow?.webContents.send('horizon:area-attached', data);
-    barWindow?.webContents.send('horizon:area-attached', data);
+    const target = captureTarget === 'floating' ? barWindow : mainWindow;
+    target?.webContents.send('horizon:area-attached', data);
     hideOverlay();
-    if (mainWindow && mainWindow.isVisible()) {
+    if (captureTarget === 'floating') {
+      showFloatingBar();
+    } else if (mainWindow && mainWindow.isVisible()) {
       mainWindow.focus();
     } else {
       showFloatingBar();
