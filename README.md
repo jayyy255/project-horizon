@@ -1,197 +1,73 @@
 # Project Horizon
 
-<p align="center">
-  <strong>System-Wide Multimodal Desktop & GUI Agent for Windows</strong><br>
-  <em>Conversational AI Mode Desktop App · Circle-to-Search Screen Lasso · Autonomous Computer-Use Agent</em>
-</p>
+<img src="assets/icon.png" width="64" alt="Horizon app icon" />
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Release-Windows%20Package%20(.exe)-0055A0?style=flat-square&logo=windows" alt="Windows Package" />
-  <img src="https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20(x64)-blue?style=flat-square&logo=windows" alt="Windows Platform" />
-  <img src="https://img.shields.io/badge/Hotkey-Ctrl%20%2B%20Alt%20%2B%20H-8CC1E9?style=flat-square" alt="Hotkey" />
-  <img src="https://img.shields.io/badge/UI-Google%20Search%20AI%20Mode-orange?style=flat-square&logo=google" alt="Google Search AI Mode" />
-  <img src="https://img.shields.io/badge/Shell-Electron%20%7C%20TypeScript-informational?style=flat-square&logo=electron" alt="Electron Shell" />
-  <img src="https://img.shields.io/badge/Perception-Local%20YOLOv8%20ONNX%20%2B%20RapidOCR-green?style=flat-square&logo=python" alt="Perception Service" />
-  <img src="https://img.shields.io/badge/Security-Two--Tier%20HITL%20%2B%20AES--256--GCM-red?style=flat-square&logo=shield" alt="Safety & Encryption" />
-</p>
+Horizon is a Windows desktop assistant for asking questions about your screen, finding local projects, and opening them in VS Code. A global shortcut opens a small prompt over the app you are using. You can ask a text-only question, select part of the screen, or attach the full display. Answers and follow-ups appear in the floating assistant; the workspace keeps your chats and shows the execution trace for actions.
 
----
+The current release is **1.1.3** for Windows 10/11 (x64). See the [changelog](CHANGELOG.md) for changes and validation.
 
-## 📖 Overview
+## Install
 
-**Project Horizon** is a multimodal Windows desktop assistant for asking about selected screen context, finding projects, and launching applications. Version 1.1.3 uses white and black glass themes with restrained blue accents, JetBrains Mono, the Horizon app icon, and restrained pixel accents. Questions and follow-ups can be answered directly in the floating assistant.
+Download the [1.1.3 friends installer](https://github.com/jayyy255/project-horizon/releases/download/v1.1.3/Project-Horizon-Friends-Setup-1.1.3-x64.exe) from the private GitHub release. You need access to the repository to download it. The installer includes Gemini access supplied by the app owner, so friends do not enter an API key. It is unsigned and may show a Windows security prompt.
 
-After approval, Horizon registers the selected global shortcut, saves it in native app settings, and restores it on restart. Preferences show its actual availability. Closing the workspace keeps Horizon in the tray; use the tray's Quit command to stop it.
+To upgrade, **Quit Horizon from the system tray**, then run the new installer. Your saved shortcut and chats remain in your Windows user profile. You do not need to uninstall the previous version.
 
-### Key Capabilities
-1. **Conversational AI Mode Chatbot**: Native, edge-to-edge desktop cockpit modeled after the Google Search AI Mode experience. View all past chat threads in the left sidebar, seamlessly continue previous discussions, and initiate new multimodal investigations with full context memory.
-2. **Floating Assistant (`Ctrl + Alt + H`)**: Summon Horizon over your current app, ask a question, and read the answer in the same bar. Circle area and Full screen are available immediately; plain-text questions need no screen context. Preferences also offer `Ctrl + Space` and `Win + Shift + C`, and preserve an existing working shortcut.
-3. **Air-Gapped Local Perception (Set-of-Marks)**: Runs an on-device YOLOv8n ONNX neural network and RapidOCR engine on `http://127.0.0.1:4200` using a silent, windowless background worker (`pythonw.exe` with zero console popups). Detects interactive buttons, input fields, containers, and text tags (`[0]`, `[1]`, `[2]...`) with zero screen data egress.
-4. **Direct Desktop Commands**: Simple app launches and screen capture use deterministic intent matching. Project-opening requests resolve an indexed folder and pass it directly to VS Code, like Explorer's Open with Code. Missing or ambiguous projects return clear errors.
-5. **Two-Tier Human-in-the-Loop Safety Gate**: Read-only actions run autonomously (Tier 1), while destructive operations (file deletions, disk modifications, arbitrary shell executions) unconditionally pause for explicit human approval via a secure modal (Tier 2).
-6. **Local Storage**: Conversations, audit records and workspace indexes remain on the device. Cached action plans use AES-256-GCM; saved Gemini keys use Windows-backed Electron credential encryption. Prompts and submitted image context are sent to Gemini for cloud reasoning.
+On first launch, review the consent screen and choose **Continue** to enable the global shortcut. New profiles start with **Ctrl + Alt + H**. Existing profiles keep their saved choice, including **Ctrl + Space**. If a shortcut is unavailable, Horizon tries another available choice and shows the active binding in **Preferences → Hotkey Trigger**. Keep Horizon running in the tray to use the shortcut outside its workspace.
 
-Physical typing, clicks, window focus and clipboard shortcuts are not connected to a native input adapter in this release. Complex requests do not resume planning after approval; Horizon reports the remaining task as unverified. Current-workspace queries cannot infer a full folder path from window titles alone.
+The standard installer, built with `npm run package:win`, does not include owner access. It requires a personal Gemini key entered under **Preferences → Inference Engine**.
 
----
+## Use the floating assistant
 
-## 💾 Installation & Quick Start
+1. Press your active shortcut. Type a question and press **Enter** for a text-only answer.
+2. For screen context, choose **Circle area**, drag around the region, then choose **Use selection**. Or choose **Full screen** to attach the display. The hotkey itself does not capture the screen.
+3. Ask your question. The answer appears in the floating assistant, where you can ask follow-ups.
+4. Choose **Open in workspace** to start a new workspace chat with any unsent draft and screen attachment. Earlier chats stay available in the sidebar.
 
-Project Horizon is distributed as a packaged desktop application for 64-bit Windows. **No website setup, manual cloning, or Node environment is required for end users.**
+You can also ask Horizon to open an indexed project in VS Code, for example, “open my code security reviewer project in VS Code.” If Horizon cannot identify one project, add its parent folder under **Preferences → Project Roots** and try again. Requests for sensitive actions pause for your review. Physical mouse clicks and typing in other apps are not connected to a native input adapter in this release, so some computer-use requests cannot complete.
 
-### 1. Download the Desktop Package
-Download the latest Windows installer or standalone package from the [GitHub Releases](https://github.com/jayyy255/project-horizon/releases) page:
-- **Private friends installer**: `Project-Horizon-Friends-Setup-1.1.3-x64.exe`, with owner-provided Gemini access and no user key setup. It uses a per-user wizard, installation-directory choice, desktop shortcut and Start menu entry.
-- Python, perception models and the native window verifier are bundled. End users do not need Node.js, Python, Miniconda or a source checkout.
-- Both build types exclude `.env` files and are currently unsigned. The explicitly opted-in friends build includes the owner's Gemini credential in its resources; keep that artifact private. The ordinary `package:win` build excludes owner credentials.
+Image questions take a direct Gemini path with resized image input. Horizon gives them a 6.5-second processing budget and reports a timeout or provider error instead of silently waiting through a longer agent plan. **An answer within seven seconds is a target, not a guarantee**; it depends on Gemini and your connection. If Gemini is temporarily unavailable, retry with a smaller or clearer selection.
 
-### 2. Launch & Approve Hotkey
-1. Run the downloaded setup executable.
-2. On first launch, Horizon will prompt for your authorization to register the global desktop shortcut:
-   - **Default Hotkey**: `Ctrl + Alt + H`; Preferences also offers `Ctrl + Space` and `Win + Shift + C`. A working saved choice is preserved. If Windows refuses a binding, Enable tries an available alternative and displays it.
-   - **Privacy Boundary**: Horizon never passively records your screen; screen context is captured only when you choose Circle area or Full screen. The hotkey alone opens a text prompt.
-3. Read the first-run disclosures, select the consent checkbox, and click **Continue**. The shortcut registers after that choice.
-4. The friends build shows **Gemini access included** in Preferences → Inference Engine. No user API key is needed. In a standard build, a user can save a personal key with Windows-backed encryption.
-5. If your projects are outside the discovered locations, add their parent folder in **Preferences → Project Roots**.
+## Privacy and access
 
-### 3. Using Horizon as Your AI Chatbot
-- **View Past Chats**: All prior questions, code explanations, and automation summaries appear in the **Past Chats** sidebar with timestamps, turn counts, and crop thumbnails.
-- **Continue Any Conversation**: Click any past session to load its full message stream, review previous answers, and type follow-up questions.
-- **Start a New Chat**: Click the **"+ New Chat"** button at the top of the sidebar.
-- **Floating answers**: Press the selected hotkey, type a prompt and press Enter. The bar grows to display the response and retains context for follow-ups. Open in workspace starts a new chat and carries any unsent prompt and context.
-- **Circle-to-Search**: Choose Circle area in the floating bar, draw around a screen region, select Use selection, then ask about it in the same bar. Full screen attaches the display instead.
-- **Image response speed**: Screen questions use a direct Gemini Flash Lite request with compressed image input. Horizon stops a slow image request after a 6.5-second processing budget and displays a retry message. Completed answers depend on the network and provider; seven-second completion is a target, not a guarantee.
+- The shortcut alone does not capture the screen. You choose when to attach a region or full display to a floating question. Action requests may also inspect the screen as part of the requested task. When Gemini handles a request, the prompt and any attached image are sent to Google; screen element detection runs on the device.
+- Chats, project indexes, and audit records are stored on your computer. Standard-build Gemini keys are encrypted for the Windows account.
+- The temporary friends installer contains an owner-provided Gemini credential in its packaged resources. Recipients can extract it. Keep the installer and its download link within the intended private group. Local limits of 10 model calls per minute and 100 per rolling 24 hours reduce accidental use, but cannot enforce a secure per-user quota. A hosted service is needed for that.
 
-The temporary friends build applies local limits of 10 Gemini model calls per minute and 100 per rolling 24 hours, saved across restarts. Each planning turn consumes a call. Requests have a brief submit cooldown and capped output length. These local limits can be bypassed by someone who extracts the bundled key; shared server enforcement is planned when hosting is selected. Google's project-level quotas remain the provider-side limits.
+## Troubleshooting
 
----
+| Symptom | What to do |
+| --- | --- |
+| Shortcut does nothing | Check **Preferences → Hotkey Trigger** for **Active across Windows**. Select another shortcut or choose **Enable shortcut**. Confirm Horizon is running in the tray. |
+| A project is not found | Add its parent folder under **Preferences → Project Roots**. Use the project's name in the request. |
+| Gemini reports 503, a timeout, or a quota error | Retry after a short pause. A 503 or timeout can occur while the key is valid; a quota error may require waiting for provider capacity. |
+| You need to stop Horizon | Use **Quit** in the system tray. Closing the workspace window leaves the shortcut active. |
 
-## 🏗️ Desktop Architecture
+## Develop and package
 
-Project Horizon is packaged as a high-performance Windows desktop application combining an Electron desktop shell, a React 19 UI cockpit, an in-process agent coordinator, and a local Python vision microservice:
+The desktop app uses Electron and React. Electron's main process owns the shortcut, screen capture, project index, and agent coordinator. The packaged app includes a local Python perception service for screen elements. See [packaging notes](packaging/README.md) for installer and verification details.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                           PROJECT HORIZON DESKTOP APPLICATION                           │
-└───────────────────────────────────────────┬─────────────────────────────────────────────┘
-                                            │
-               ┌────────────────────────────┴─────────────────────────────┐
-               ▼                                                          ▼
-┌────────────────────────────────────────────────────────┐    ┌───────────────────────────┐
-│           ELECTRON NATIVE DESKTOP SHELL (x64)          │    │    Perception-Service     │
-│  ┌────────────────────────┐  ┌──────────────────────┐  │    │   (Local Python 3.13)     │
-│  │   AI Chatbot UI        │  │   In-Process Agent   │  │    │        Port: 4200         │
-│  │ (React 19 + Tailwind)  │  │   Host & Coordinator │  │    │  (YOLOv8 + OCR + SoM Tag) │
-│  └───────────┬────────────┘  └──────────┬───────────┘  │    └─────────────┬─────────────┘
-└──────────────┼──────────────────────────┼──────────────┘                  │
-               │ Direct IPC Renderer      │ Direct IPC Method               │
-               └──────────────────────────► (Reflexive / Cache / Router)    │
-                                          ├─────────────────────────────────┘
-                                          ▼
-                         ┌─────────────────────────────────┐
-                         │   On-Device SQLite Storage      │
-                         │   - horizon_graph.db (Topology) │
-                         │   - horizon_index.db (FTS5)     │
-                         │   - horizon_cache.db (AES-256)  │
-                         │   - horizon_audit.db (Auditing) │
-                         └────────────────┬────────────────┘
-                                          │
-                    ┌─────────────────────┴─────────────────────┐
-                    ▼                                           ▼
-      ┌───────────────────────────┐               ┌───────────────────────────┐
-      │   Cloud Gemini Planners   │               │   Local Offline Fallback  │
-      │   - Gemini 2.5 Flash      │  (Failover)   │   - Ollama Llama 3.2      │
-      │   - Gemini 3.5 Flash-Lite │ ────────────► │   - Ollama Vision (11B)   │
-      │   - Gemini 2.5 Pro        │               │   - Qwen 2.5 (3B)         │
-      └───────────────────────────┘               └───────────────────────────┘
-```
+Prerequisites: Windows 10/11 (x64), Node.js 20 or 22, and Python 3.13 with the perception service dependencies installed in `backend/perception-service/.venv` for packaging.
 
----
-
-## 📁 Repository Structure (For Contributors)
-
-For developers contributing to Project Horizon on GitHub, the repository is organized into the following core subsystems:
-
-```
-project-horizon/
-├── electron/                         # Native Windows Electron desktop shell & coordinator
-│   ├── main.ts                       # Main process entry, desktop capturer & global hotkeys
-│   ├── preload.ts                    # Secure contextBridge API bindings
-│   └── agent/                        # In-process Agent Coordinator & Engines
-│       ├── coordinator.ts            # ReAct multi-step reasoning loop & tool dispatch
-│       ├── gate.ts                   # SafetyGate (Tier 1 Autonomous vs Tier 2 HITL)
-│       ├── verifier.ts               # ActionVerifier (Win32 EnumWindows & pixel-delta checks)
-│       ├── reflexive.ts              # ReflexiveMatcher (<1ms zero-token intent interceptor)
-│       ├── router.ts                 # ModelRouter & CircuitBreaker (Gemini <-> Ollama)
-│       ├── cache.ts                  # CommandCache (AES-256-GCM encrypted plan storage)
-│       ├── indexer.ts                # ProjectIndexer (SQLite FTS5 & Get-StartApps catalog)
-│       ├── graph.ts                  # SystemKnowledgeGraph (Topology & workspace mapping)
-│       ├── synthesizer.ts            # InputSynthesizer (Bézier curves & panic corner slam)
-│       └── db.ts                     # AuditDatabase (Cryptographic audit ledger)
-├── frontend/                         # Desktop Chatbot UI Shell (React 19 + TailwindCSS)
-│   ├── src/
-│   │   ├── App.tsx                   # Main AI Mode Chatbot app & session continuation
-│   │   ├── components/               # Contextual prompt bar, lasso overlay & modals
-│   │   ├── hooks/                    # Agent client hooks & state synchronization
-│   │   └── styles/                   # Celestial dark/light theme tokens & liquid glass styles
-│   └── vite.config.ts                # Frontend bundler configuration
-├── backend/
-│   ├── perception-service/           # Air-gapped local perception microservice
-│   │   ├── server.py                 # FastAPI HTTP server (port 4200)
-│   │   ├── detector.py               # YOLOv8 ONNX + RapidOCR element detection
-│   │   ├── som_visualizer.py         # Set-of-Marks badge rendering engine
-│   │   └── models/yolov8n.onnx       # YOLOv8n ONNX neural network weights
-│   └── agent-service/                # Standalone agent coordinator service
-├── shared/                           # Shared TypeScript interfaces, geometry & AABB algorithms
-├── electron-builder.yml              # Windows desktop installer & packaging specification
-├── package.json                      # Workspace configuration & desktop build scripts
-└── LICENSE                           # License file
-```
-
----
-
-## 🛠️ Contributor Build Guide
-
-If you are developing or contributing to the Project Horizon source code, follow these steps to build and package the application:
-
-### 1. Prerequisites
-- **OS**: Windows 10 or 11 (x64)
-- **Node.js**: `v20.x` or `v22.x` (LTS)
-- **Python**: `3.11` – `3.13` (x64)
-
-### 2. Install Development Dependencies
 ```powershell
 npm install
 npm install --prefix frontend
 npm install --prefix backend/agent-service
+npm run dev:desktop
 ```
 
-### 3. Build & Package Desktop Executable
+Useful checks and builds:
+
 ```powershell
-# Compile frontend, agent coordinator, and electron processes
+npm run test:frontend
+npm run test:desktop:commands
+npm run test:desktop:hotkeys
+npm run test:desktop:vision
 npm run build:desktop
-
-# Package into standalone unpackaged directory (release/win-unpacked/Project Horizon.exe)
-npm run package:dir
-
-# Build complete NSIS Windows installer (.exe)
 npm run package:win
 ```
 
----
+The private friends build is an explicit opt-in described in the [packaging notes](packaging/README.md). Never commit a Gemini key or the generated installer to this repository.
 
-## 🛡️ Security, Privacy & Safety Invariants
+## License
 
-Project Horizon is engineered with strict cryptographic and physical safety guarantees:
-
-1. **Zero Egress for Perception & State**: Desktop screenshots, OCR tokens, system knowledge graphs, and audit databases never leave your machine.
-2. **Deterministic Two-Tier Safety Gate**: Every action passes through `SafetyGate.evaluate()`. Destructive operations (file deletion, process termination, disk modification) halt execution until you confirm them in the Tier 2 modal.
-3. **Physical Action Verification**: The agent verifies physical changes (process PID creation, Win32 window focus via `EnumWindows`, screen region pixel deltas > 0%) before declaring success.
-4. **Hardware Panic Override**: A physical mouse corner-slam gesture aborts agent operations and clears synthetic input queues in under 20 milliseconds.
-5. **Visual Prompt Injection (VIPI) Defense**: Mandatory system prompts instruct the planner to ignore instructions or commands embedded within target screenshots.
-
----
-
-## 📄 License
-
-This project is licensed under the ISC License. See the [LICENSE](LICENSE) file for details.
+[ISC](LICENSE).
