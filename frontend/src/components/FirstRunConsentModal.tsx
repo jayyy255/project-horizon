@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
 import { ArrowRight, Camera, Cloud, ShieldCheck } from 'lucide-react';
 import { HorizonMark } from './HorizonMark';
+import { DEFAULT_HOTKEY } from '@shared/hotkeys';
 
 interface FirstRunConsentModalProps {
   isDarkMode: boolean;
   isBusy?: boolean;
   error?: string;
+  shortcutLabel?: string;
   onConsentGiven?: () => void;
   onConsentDeclined?: () => void;
 }
 
 export const FirstRunConsentModal: React.FC<FirstRunConsentModalProps> = ({
-  isDarkMode, isBusy, error, onConsentGiven, onConsentDeclined,
+  isDarkMode, isBusy, error, shortcutLabel = DEFAULT_HOTKEY.label, onConsentGiven, onConsentDeclined,
 }) => {
   const [agreed, setAgreed] = useState(false);
 
@@ -27,7 +29,7 @@ export const FirstRunConsentModal: React.FC<FirstRunConsentModalProps> = ({
         <p id="consent-description" className="consent-intro">Ask about what's on your screen, find files, and take action without leaving your desktop.</p>
         <div className="consent-shortcut">
           <div><strong>One shortcut, anywhere</strong><span>Open your floating assistant</span></div>
-          <div className="consent-keys" aria-label="Windows plus Shift plus C"><kbd>Win</kbd><span>+</span><kbd>Shift</kbd><span>+</span><kbd>C</kbd></div>
+          <div className="consent-keys" aria-label={shortcutLabel}>{shortcutLabel.split(' + ').map((key,index)=><React.Fragment key={index}>{index > 0 && <span>+</span>}<kbd>{key}</kbd></React.Fragment>)}</div>
         </div>
         <div className="consent-disclosures">
           <div className="consent-disclosure"><Camera size={17} /><div><h3>You choose what to share</h3><p>Capture your screen or select a region when you need it. Horizon doesn't record in the background.</p></div></div>

@@ -14,6 +14,7 @@ import { CommandCache } from './cache';
 import { agentDataPath } from './sqlite';
 import { parseProjectOpen } from './workspaces';
 import { RequestLimiter } from './rateLimit';
+import { answerImageQuestion, imagePart, isImageQuestion } from './vision';
 
 export interface ReActStep {
   stepIndex: number;
@@ -179,6 +180,17 @@ export class AgentCoordinator {
     });
 
     this.notify();
+
+    if (!plannerOverride && process.env.MOCK_PLANNER !== 'true' && isImageQuestion(prompt, images)) {
+      this.activeSession.currentNarration = 'Reading your screen…';
+      this.notify();
+      const result = await answerImageQuestion(prompt, images, history, this.requestLimiter);
+      this.activeSession.status = result.finalAnswer ? 'done' : 'error';
+      this.activeSession.currentNarration = result.finalAnswer || result.error || 'Could not answer this image question.';
+      this.auditDb.updateSessionOutcome(sessionId, result.finalAnswer ? 'succeeded' : 'failed');
+      this.notify();
+      return this.activeSession;
+    }
 
     // 0. Ground attached images via local perception engine if present
     if (images && images.length > 0 && typeof images[0] === 'string' && images[0].length > 0) {
@@ -789,13 +801,13 @@ export class AgentCoordinator {
   private warnedInvalidKey = false;
 
   private async queryGeminiPlanner(
-    state: ReActSessionState
-  ): Promise<{ action?: ProposedAction; finalAnswer?: string; error?: string } | null> {
+    state: ReActSessionState, fallbackModel?: string
+  ): Promise<{ action?: ProposedAction; finalAnswer?: string; error?: string; retryable?: boolean } | null> {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey || apiKey === 'your_gemini_api_key_here') return null;
 
     // Route model dynamically via ModelRouter (Phase B)
-    const selection = this.modelRouter.selectModel(state);
+    const selection = fallbackModel ? { model: fallbackModel, tier: 'fast_fallback', isCanary: false } : this.modelRouter.selectModel(state);
     if (selection.model === 'ollama') {
       return null; // Route to Ollama directly
     }
@@ -832,13 +844,7 @@ export class AgentCoordinator {
 
       if (state.images && state.images.length > 0) {
         for (const img of state.images) {
-          const rawB64 = img.replace(/^data:image\/[a-z]+;base64,/, '');
-          parts.push({
-            inline_data: {
-              mime_type: 'image/png',
-              data: rawB64,
-            },
-          });
+          parts.push(imagePart(img));
         }
       }
 
@@ -863,16 +869,17 @@ export class AgentCoordinator {
       if (!res.ok) {
         this.modelRouter.getCircuitBreaker().recordFailure(model);
         if (res.status === 429) return { error: 'Gemini usage is temporarily limited. Please try again shortly.' };
-        const errText = await res.text().catch(() => '');
-        console.warn(`[Gemini Live HTTP] Non-200 response (${res.status}): ${errText.substring(0, 150)}. Engaging Ollama fallback.`);
-        return null;
+        if (res.status >= 500) return { error: `Gemini is temporarily busy or unavailable (HTTP ${res.status}). Try again shortly.`, retryable: true };
+        if ([401, 403].includes(res.status)) return { error: 'Gemini access was refused. Check the key permissions in Google AI Studio.' };
+        if (res.status === 404) return { error: `Gemini model ${model} is unavailable. Check the configured model.` };
+        return { error: `Gemini could not answer this request (HTTP ${res.status}). Try again.` };
       }
 
       const data = await res.json();
-      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      const rawText = data.candidates?.[0]?.content?.parts?.filter((part: { thought?: boolean; text?: string }) => !part.thought && part.text).map((part: { text: string }) => part.text).join('');
       if (!rawText) {
         this.modelRouter.getCircuitBreaker().recordFailure(model);
-        return null;
+        return { error: 'Gemini returned no completed answer. Try again.' };
       }
 
       const parsed = JSON.parse(rawText);
@@ -898,6 +905,7 @@ export class AgentCoordinator {
       this.modelRouter.getCircuitBreaker().recordFailure(model);
       const latencyMs = performance.now() - startTime;
       console.warn(`[Gemini Live HTTP] Request failed after ${latencyMs.toFixed(2)} ms:`, err);
+      return { error: err instanceof SyntaxError ? 'Gemini returned an invalid response. Try again.' : err instanceof Error && /TimeoutError|AbortError/.test(err.name) ? 'Gemini took too long to respond. Try again.' : 'Could not connect to Gemini. Check your connection and try again.' };
     }
     return null;
   }
@@ -1026,6 +1034,10 @@ Respond ONLY with a valid JSON object matching:
     // 1. Primary Cloud Planner: Google Gemini (gemini-3.5-flash-lite)
     if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'your_gemini_api_key_here') {
       const geminiPlan = await this.queryGeminiPlanner(state);
+      if (geminiPlan?.retryable) {
+        const fallback = await this.queryGeminiPlanner(state, process.env.HORIZON_GEMINI_CLOUD_FALLBACK_MODEL || 'gemini-3.1-flash-lite');
+        return fallback || geminiPlan;
+      }
       if (geminiPlan) {
         return geminiPlan;
       }

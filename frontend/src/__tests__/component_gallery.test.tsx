@@ -14,8 +14,8 @@ import { StateMachineTokenKit } from '../components/StateMachineTokenKit';
 describe('Project Horizon Isolated Component Specifications (Dev Gallery Suite)', () => {
   it('renders CaptureOverlayCanvas with HUD and exit controls', () => {
     render(<CaptureOverlayCanvas isDarkMode={true} onExit={() => {}} onAttachArea={() => {}} />);
-    expect(screen.getByText(/Lasso Active/i)).toBeDefined();
-    expect(screen.getByText(/Attach Full Screen/i)).toBeDefined();
+    expect(screen.getByText('Screen context')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Full screen' })).toBeDefined();
   });
 
   it('renders ContextualPromptBar with search placeholder and controls', () => {
@@ -68,7 +68,7 @@ describe('Project Horizon Isolated Component Specifications (Dev Gallery Suite)'
   it('renders SettingsPreferencesSuite with tab controls and hotkey manager', () => {
     render(<SettingsPreferencesSuite isDarkMode={true} />);
     expect(screen.getByText('Floating Assistant Hotkey')).toBeDefined();
-    expect(screen.getByText('Cycle Hotkey')).toBeDefined();
+    expect(screen.getByRole('combobox', { name: 'Floating assistant shortcut' })).toBeDefined();
     expect(screen.getByText('Project Roots')).toBeDefined();
   });
 

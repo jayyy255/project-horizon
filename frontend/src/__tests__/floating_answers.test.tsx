@@ -8,6 +8,26 @@ beforeEach(() => { localStorage.clear(); mock.state = null; mock.dispatch.mockRe
 afterEach(() => { delete window.horizonAPI; });
 const send = (text: string) => { fireEvent.change(screen.getByRole('textbox'), { target: { value: text } }); fireEvent.click(screen.getByRole('button', { name: 'Generate' })); };
 describe('Floating answers and follow-up conversation', () => {
+  it('offers circle and full-screen context immediately while allowing a text-only question', async () => {
+    window.horizonAPI = { triggerCapture: vi.fn().mockResolvedValue(true), captureDesktop: vi.fn().mockResolvedValue({ dataUrl: 'data:image/png;base64,test', displayLabel: 'Desktop' }) } as any;
+    mock.dispatch.mockResolvedValue(answer('Text answer'));
+    render(<FloatingBarWindow isDarkMode />);
+    fireEvent.click(screen.getByRole('button', { name: 'Circle Area' }));
+    await waitFor(() => expect(window.horizonAPI?.triggerCapture).toHaveBeenCalledOnce());
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Full Screen' }) as HTMLButtonElement).disabled).toBe(false));
+    send('A question without context');
+    await waitFor(() => expect(mock.dispatch).toHaveBeenCalledWith('A question without context', [], []));
+  });
+  it('opens a fresh workspace chat with the unsent draft and selected screen context', async () => {
+    window.horizonAPI = { openMainWindow: vi.fn(), captureDesktop: vi.fn().mockResolvedValue({ dataUrl: 'data:image/png;base64,test', displayLabel: 'Desktop' }) } as any;
+    render(<FloatingBarWindow isDarkMode />);
+    fireEvent.click(screen.getByRole('button', { name: 'Full Screen' }));
+    await waitFor(() => expect(screen.getByAltText('Crop preview')).toBeDefined());
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Explain this page' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Open workspace' }));
+    expect(window.horizonAPI?.openMainWindow).toHaveBeenCalledWith({ newChat: true, draft: 'Explain this page', attachments: [expect.objectContaining({ type: 'fullscreen', croppedDataUrl: 'data:image/png;base64,test' })] });
+    expect(mock.dispatch).not.toHaveBeenCalled();
+  });
   it('shows the actual answer in the bar and reuses history for a follow-up', async () => {
     mock.dispatch.mockResolvedValueOnce(answer('The answer is 42.')).mockResolvedValueOnce(answer('Because of the calculation.'));
     render(<FloatingBarWindow isDarkMode />); send('What is the answer?');

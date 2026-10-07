@@ -19,6 +19,9 @@ interface ContextualPromptBarProps {
   onClearAttachments?: () => void;
   onTriggerLasso?: () => void;
   onTriggerFullScreen?: () => void;
+  showContextChoices?: boolean;
+  initialPrompt?: string;
+  onDraftChange?: (draft: string) => void;
 }
 
 export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({ 
@@ -29,9 +32,12 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
   onRemoveAttachment,
   onClearAttachments,
   onTriggerLasso,
-  onTriggerFullScreen
+  onTriggerFullScreen,
+  showContextChoices = false,
+  initialPrompt = '',
+  onDraftChange
 }) => {
-  const [promptText, setPromptText] = useState("");
+  const [promptText, setPromptText] = useState(initialPrompt);
   const [submittedMsg, setSubmittedMsg] = useState("");
   const [showCaptureMenu, setShowCaptureMenu] = useState(false);
   const captureMenuRef = useRef<HTMLDivElement>(null);
@@ -59,6 +65,7 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
     setSubmittedMsg(`Task submitted to Horizon: "${finalTxt}"`);
     setTimeout(() => setSubmittedMsg(""), 3500);
     setPromptText("");
+    onDraftChange?.('');
   };
 
   return (
@@ -130,7 +137,7 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
             rows={2}
             aria-label="Message Horizon"
             value={promptText}
-            onChange={(e) => setPromptText(e.target.value)}
+            onChange={(e) => { setPromptText(e.target.value); onDraftChange?.(e.target.value); }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
@@ -146,7 +153,10 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
           />
           <div className="prompt-toolbar">
           {/* Add Files or Context Options */}
-          <div className="relative" ref={captureMenuRef}>
+          {showContextChoices ? <div className="context-choices" aria-label="Optional screen context">
+            <button type="button" disabled={isBusy} onClick={onTriggerLasso} aria-label="Circle Area"><Crop size={14} />Circle area</button>
+            <button type="button" disabled={isBusy} onClick={onTriggerFullScreen} aria-label="Full Screen"><Monitor size={14} />Full screen</button>
+          </div> : <div className="relative" ref={captureMenuRef}>
             <button
               onClick={() => setShowCaptureMenu(prev => !prev)}
               className={`px-3 p-2 rounded-xl transition-all flex items-center gap-1.5 text-xs font-semibold border ${
@@ -204,6 +214,7 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
             )}
           </div>
 
+          }
           <span className="prompt-model">Gemini</span>
 
           {/* Send / Generate Prompt */}

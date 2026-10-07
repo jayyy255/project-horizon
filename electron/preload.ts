@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { Tier2ActionPayload } from '../shared/types';
+import { Tier2ActionPayload, WorkspaceChatRequest } from '../shared/types';
 
 export interface DesktopCaptureData {
   dataUrl: string;
@@ -77,7 +77,12 @@ contextBridge.exposeInMainWorld('horizonAPI', {
     ipcRenderer.on('horizon:hotkey-status', handler);
     return () => ipcRenderer.removeListener('horizon:hotkey-status', handler);
   },
-  openMainWindow: () => ipcRenderer.invoke('horizon:open-main-window'),
+  openMainWindow: (request?: WorkspaceChatRequest) => ipcRenderer.invoke('horizon:open-main-window', request),
+  onWorkspaceChatRequested: (callback: (request: WorkspaceChatRequest) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, request: WorkspaceChatRequest) => callback(request);
+    ipcRenderer.on('horizon:workspace-chat-requested', handler);
+    return () => ipcRenderer.removeListener('horizon:workspace-chat-requested', handler);
+  },
   hideFloatingBar: () => ipcRenderer.invoke('horizon:hide-floating-bar'),
   resizeFloatingBar: (height: number) => ipcRenderer.invoke('horizon:resize-floating-bar', height),
   toggleFloatingBar: () => ipcRenderer.invoke('horizon:toggle-floating-bar'),

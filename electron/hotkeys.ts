@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { HOTKEY_OPTIONS, HotkeyStatus, HotkeyResult } from '../shared/hotkeys';
+import { DEFAULT_HOTKEY, HOTKEY_OPTIONS, HotkeyStatus, HotkeyResult } from '../shared/hotkeys';
 
 interface ShortcutRegistry {
   register(accelerator: string, callback: () => void): boolean;
@@ -11,9 +11,11 @@ interface ShortcutRegistry {
 /** Main-process ownership and persistence; renderer storage is only migrated once. */
 export class HotkeyManager {
   private approved = false;
-  private accelerator: string = HOTKEY_OPTIONS[0].accelerator;
+  private accelerator: string = DEFAULT_HOTKEY.accelerator;
   private active: string | null = null;
   private error?: string;
+  private notice?: string;
+  private registrationUnavailable = false;
 
   constructor(private file: string, private registry: ShortcutRegistry, private summon: () => void) {
     try {
@@ -28,19 +30,38 @@ export class HotkeyManager {
   getStatus(): HotkeyStatus {
     return { approved: this.approved, active: Boolean(this.active && this.registry.isRegistered(this.active)),
       accelerator: this.accelerator, label: HOTKEY_OPTIONS.find(option => option.accelerator === this.accelerator)!.label,
-      error: this.error };
+      error: this.error, notice: this.notice };
   }
 
   restore(): HotkeyStatus {
-    if (this.approved) this.activate(this.accelerator, false);
+    if (this.approved) this.activateWithFallback(this.accelerator, false);
     return this.getStatus();
   }
 
-  approve(accelerator = this.accelerator): HotkeyResult {
-    return this.activate(accelerator, true);
+  approve(accelerator?: string): HotkeyResult {
+    // An explicit selection must preserve the user's working choice on failure.
+    return accelerator === undefined ? this.activateWithFallback(this.accelerator, true) : this.activate(accelerator, true);
   }
 
-  private activate(next: string, persist: boolean): HotkeyResult {
+  private activateWithFallback(next: string, persist: boolean): HotkeyResult {
+    let result = this.activate(next, persist);
+    if (!this.registrationUnavailable || result.active) return result;
+    for (const option of [DEFAULT_HOTKEY, ...HOTKEY_OPTIONS.filter(option => option.accelerator !== DEFAULT_HOTKEY.accelerator)]) {
+      if (option.accelerator === next) continue;
+      result = this.activate(option.accelerator, true, false);
+      if (result.success) {
+        this.notice = `${HOTKEY_OPTIONS.find(option => option.accelerator === next)!.label} was unavailable. Horizon is now using ${result.label}.`;
+        return { ...this.getStatus(), success: true };
+      }
+      if (!this.registrationUnavailable) return result;
+    }
+    this.error = 'No supported shortcut is available. Free one of the listed combinations in another app, then try Enable shortcut again.';
+    return { ...this.getStatus(), success: false };
+  }
+
+  private activate(next: string, persist: boolean, saveFailedChoice = true): HotkeyResult {
+    this.registrationUnavailable = false;
+    this.notice = undefined;
     if (!HOTKEY_OPTIONS.some(option => option.accelerator === next)) {
       return { ...this.getStatus(), success: false, error: 'Choose one of the supported shortcuts.' };
     }
@@ -50,7 +71,7 @@ export class HotkeyManager {
     let registrationError = '';
     try { if (!alreadyActive) registered = this.registry.register(next, this.summon); }
     catch { registrationError = 'Windows could not register this shortcut.'; }
-    const accelerator = registered ? next : (previous || next);
+    const accelerator = registered ? next : (previous || (saveFailedChoice ? next : this.accelerator));
     const approved = persist || this.approved;
     if (persist) {
       try {
@@ -68,6 +89,7 @@ export class HotkeyManager {
       if (previous && previous !== next) this.registry.unregister(previous);
       this.error = undefined;
     } else {
+      this.registrationUnavailable = true;
       this.error = registrationError || 'This shortcut is unavailable or used by another application. Choose another shortcut in Preferences.';
     }
     return { ...this.getStatus(), success: registered };

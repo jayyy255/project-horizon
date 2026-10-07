@@ -19,6 +19,10 @@ export function FloatingBarWindow({ isDarkMode }: { isDarkMode: boolean }) {
   const [attachments, setAttachments] = useState<ScreenAttachment[]>([]);
   const [messages, setMessages] = useState<FloatingMessage[]>([]);
   const [busy, setBusy] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [captureError, setCaptureError] = useState('');
+  const [capturing, setCapturing] = useState(false);
+  const [composerVersion, setComposerVersion] = useState(0);
   const panel = useRef<HTMLDivElement>(null);
   const feed = useRef<HTMLDivElement>(null);
   const conversation = useRef<string | null>(null);
@@ -80,18 +84,26 @@ export function FloatingBarWindow({ isDarkMode }: { isDarkMode: boolean }) {
     finally { pending.current = false; setBusy(false); }
   };
   const captureScreen = async () => {
+    setCaptureError(''); setCapturing(true);
     try {
       const data = await window.horizonAPI?.captureDesktop();
       if (data?.dataUrl) setAttachments(prev => [...prev, { id: crypto.randomUUID(), label: data.displayLabel || 'Desktop',
         type: 'fullscreen', croppedDataUrl: data.dataUrl, timestamp: Date.now() }]);
-    } catch (error) { console.warn('[FloatingBar] Screen capture failed:', error); }
+    } catch { setCaptureError('Could not capture your screen. Try again.'); }
+    finally { setCapturing(false); }
+  };
+  const circleScreen = async () => {
+    setCaptureError(''); setCapturing(true);
+    try { if (!await window.horizonAPI?.triggerCapture?.()) setCaptureError('Could not start screen selection. Try again.'); }
+    catch { setCaptureError('Could not start screen selection. Try again.'); }
+    finally { setCapturing(false); }
   };
 
   return <div className={`floating-bar ${isDarkMode ? '' : 'light-mode'} w-full h-full p-2 flex flex-col justify-end bg-transparent`}>
     <div ref={panel} className="floating-panel w-full backdrop-blur-2xl">
       <header className="floating-header"><div className="flex items-center gap-2"><HorizonMark size={23} /><span>Horizon</span>{busy && <span className="floating-thinking">Thinking…</span>}</div><div className="flex items-center gap-1">
-        <button disabled={busy || Boolean(approval)} onClick={() => { conversation.current = null; setMessages([]); setAttachments([]); }} aria-label="New floating conversation" title="New question"><Plus size={15} /></button>
-        <button onClick={() => void window.horizonAPI?.openMainWindow?.()} aria-label="Open workspace" title="Open workspace"><Maximize2 size={14} /></button>
+        <button disabled={busy || Boolean(approval)} onClick={() => { conversation.current = null; setMessages([]); setAttachments([]); setDraft(''); setComposerVersion(value => value + 1); }} aria-label="New floating conversation" title="New question"><Plus size={15} /></button>
+        <button disabled={busy || Boolean(approval) || capturing} onClick={() => void window.horizonAPI?.openMainWindow?.({ newChat: true, draft, attachments })} aria-label="Open workspace" title="Open a new chat in workspace"><Maximize2 size={14} /></button>
         <button onClick={() => void window.horizonAPI?.hideFloatingBar?.()} aria-label="Dismiss floating assistant" title="Dismiss (Esc)"><X size={15} /></button>
       </div></header>
       {messages.length > 0 && <section ref={feed} className="floating-feed" aria-label="Floating conversation" aria-live="polite">
@@ -100,9 +112,11 @@ export function FloatingBarWindow({ isDarkMode }: { isDarkMode: boolean }) {
         </article>)}
         {approval && <div className="floating-approval"><strong className="flex items-center gap-2"><ShieldCheck size={15} />Your approval is needed</strong><p>{approval.description}</p><code>{approval.command || [approval.executablePath, ...(approval.args || [])].filter(Boolean).join(' ')}</code><div className="flex justify-end gap-3 mt-3"><button disabled={busy} onClick={() => void decide(false)}>Deny</button><button disabled={busy} onClick={() => void decide(true)}>Allow once</button></div></div>}
       </section>}
-      <ContextualPromptBar isDarkMode={isDarkMode} attachments={attachments} onRemoveAttachment={id => setAttachments(prev => prev.filter(item => item.id !== id))}
-        onClearAttachments={() => setAttachments([])} onTriggerLasso={() => void window.horizonAPI?.triggerCapture?.()} onTriggerFullScreen={() => void captureScreen()}
-        onSubmitPrompt={submit} isBusy={busy || Boolean(approval)} />
+      {messages.length === 0 && <p className="floating-context-hint">Ask anything, or add screen context below.</p>}
+      {captureError && <p role="alert" className="floating-context-error">{captureError}</p>}
+      <ContextualPromptBar key={composerVersion} isDarkMode={isDarkMode} showContextChoices onDraftChange={setDraft} attachments={attachments} onRemoveAttachment={id => setAttachments(prev => prev.filter(item => item.id !== id))}
+        onClearAttachments={() => setAttachments([])} onTriggerLasso={() => void circleScreen()} onTriggerFullScreen={() => void captureScreen()}
+        onSubmitPrompt={submit} isBusy={busy || capturing || Boolean(approval)} />
     </div>
   </div>;
 }

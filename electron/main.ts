@@ -157,6 +157,7 @@ async function captureRealDesktop(targetWindowName?: string): Promise<{
 
 
 
+  if (!dataUrl) throw new Error('Windows did not return a screen image. Try capturing again.');
   lastCapturedData = {
     dataUrl,
     width: primaryDisplay.bounds.width,
@@ -285,9 +286,11 @@ function createOverlayWindow(): BrowserWindow {
   return overlayWindow;
 }
 
-async function triggerRealCaptureAndShowOverlay(): Promise<void> {
+async function triggerRealCaptureAndShowOverlay(): Promise<boolean> {
   const t0 = performance.now();
   try {
+    // Allow the floating assistant's dismissal to reach the compositor.
+    await new Promise(resolve => setTimeout(resolve, 100));
     // 1. Capture real desktop screenshot first
     const captureData = await captureRealDesktop();
 
@@ -295,6 +298,7 @@ async function triggerRealCaptureAndShowOverlay(): Promise<void> {
     if (!overlayWindow) {
       createOverlayWindow();
     }
+    if (overlayWindow?.webContents.isLoading()) await new Promise<void>(resolve => overlayWindow!.webContents.once('did-finish-load', () => resolve()));
 
     // 3. Send capture data to overlay window to render full screen lasso canvas
     overlayWindow?.webContents.send('horizon:desktop-captured', captureData);
@@ -307,8 +311,11 @@ async function triggerRealCaptureAndShowOverlay(): Promise<void> {
 
     const tReady = performance.now();
     console.log(`[Project Horizon] Real desktop capture -> overlay ready in ${(tReady - t0).toFixed(2)} ms`);
+    return true;
   } catch (err) {
     console.error('[Project Horizon] Failed to capture real desktop:', err);
+    if (captureTarget === 'floating') showFloatingBar();
+    return false;
   }
 }
 
@@ -544,12 +551,17 @@ app.whenReady().then(async () => {
     return result;
   });
 
-  ipcMain.handle('horizon:open-main-window', () => {
+  ipcMain.handle('horizon:open-main-window', async (event, request) => {
+    const fromBar = event.sender === barWindow?.webContents;
     if (!mainWindow || mainWindow.isDestroyed()) {
       createMainWindow();
     }
     mainWindow?.show();
     mainWindow?.focus();
+    if (fromBar && request?.newChat === true && mainWindow) {
+      if (mainWindow.webContents.isLoading()) await new Promise<void>(resolve => mainWindow!.webContents.once('did-finish-load', () => resolve()));
+      mainWindow.webContents.send('horizon:workspace-chat-requested', request);
+    }
     hideFloatingBar();
     return true;
   });
@@ -575,12 +587,14 @@ app.whenReady().then(async () => {
   ipcMain.handle('horizon:trigger-capture', async (event) => {
     captureTarget = event.sender === barWindow?.webContents ? 'floating' : 'workspace';
     hideFloatingBar();
-    await triggerRealCaptureAndShowOverlay();
-    return true;
+    return await triggerRealCaptureAndShowOverlay();
   });
 
-  ipcMain.handle('horizon:capture-desktop', async (_event, targetWindowName?: string) => {
-    return await captureRealDesktop(targetWindowName);
+  ipcMain.handle('horizon:capture-desktop', async (event, targetWindowName?: string) => {
+    const fromBar = event.sender === barWindow?.webContents && isBarVisible;
+    if (fromBar) { hideFloatingBar(); await new Promise(resolve => setTimeout(resolve, 100)); }
+    try { return await captureRealDesktop(targetWindowName); }
+    finally { if (fromBar) showFloatingBar(); }
   });
 
 

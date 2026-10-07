@@ -61,9 +61,12 @@ function DesktopWorkspace() {
   // Real Desktop Screenshot state from Electron desktopCapturer
   const [realScreenshotUrl, setRealScreenshotUrl] = useState<string | null>(null);
   const [captureDisplayInfo, setCaptureDisplayInfo] = useState<{ width: number; height: number; scaleFactor?: number; label?: string } | null>(null);
+  const [captureSequence, setCaptureSequence] = useState(0);
 
   // Screen attachments & chat visibility
   const [attachments, setAttachments] = useState<ScreenAttachment[]>([]);
+  const [workspaceDraft, setWorkspaceDraft] = useState('');
+  const [composerVersion, setComposerVersion] = useState(0);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Full Conversational Chatbot Session Model (like Google Search AI mode)
@@ -205,6 +208,7 @@ function DesktopWorkspace() {
       const unsubCapture = window.horizonAPI.onDesktopCaptured((data) => {
         console.log('[App] Real desktop captured from Electron:', data.width, 'x', data.height);
         setRealScreenshotUrl(data.dataUrl);
+        setCaptureSequence(sequence => sequence + 1);
         setCaptureDisplayInfo({
           width: data.width,
           height: data.height,
@@ -322,7 +326,7 @@ function DesktopWorkspace() {
   };
 
   const handleNewChat = () => {
-    const newId = `session-${Date.now()}`;
+    const newId = `session-${crypto.randomUUID()}`;
     const newSession: FullChatSession = {
       id: newId,
       title: 'New Conversation',
@@ -333,7 +337,16 @@ function DesktopWorkspace() {
     setChatSessions(prev => [newSession, ...prev]);
     setActiveSessionId(newId);
     setAttachments([]);
+    setWorkspaceDraft('');
+    setComposerVersion(value => value + 1);
   };
+
+  useEffect(() => window.horizonAPI?.onWorkspaceChatRequested?.(request => {
+    handleNewChat();
+    setWorkspaceDraft(request.draft || '');
+    setAttachments(request.attachments || []);
+    setShowSettingsModal(false); setShowHistoryDrawer(false); setIsTraceExpanded(false);
+  }), []);
 
   const handleSelectSession = (sessionId: string) => {
     setActiveSessionId(sessionId);
@@ -491,6 +504,7 @@ function DesktopWorkspace() {
     return (
       <div className="fixed inset-0 z-50 bg-black/90 p-0 m-0 w-screen h-screen overflow-hidden select-none">
         <CaptureOverlayCanvas
+          key={captureSequence}
           isDarkMode={isDarkMode}
           screenshotUrl={realScreenshotUrl}
           displayInfo={captureDisplayInfo}
@@ -583,7 +597,7 @@ function DesktopWorkspace() {
             {(sessionState || isExecuting) && <div className="trace-dock">{isTraceExpanded && <div className="trace-expanded"><ReActTracePanel isDarkMode={isDarkMode} steps={liveTraceSteps} onClose={() => setIsTraceExpanded(false)} /></div>}<HUDCollapsedChip isDarkMode={isDarkMode} isExpanded={isTraceExpanded} onToggleLogs={() => setIsTraceExpanded(prev => !prev)} currentNarration={sessionState?.currentNarration} status={sessionState?.status} /></div>}
             {lastError && <p role="alert" className="text-xs text-rose-400 mb-2">{lastError}</p>}
             {(hotkeyError || consentError) && !showConsentModal && <div role="alert" className="text-xs text-rose-300 mb-3">{hotkeyError || consentError} <button className="underline" onClick={() => setShowSettingsModal(true)}>Open Preferences</button></div>}
-            <ContextualPromptBar isDarkMode={isDarkMode} attachments={attachments} onRemoveAttachment={handleRemoveAttachment} onClearAttachments={handleClearAttachments} onTriggerLasso={handleTriggerLasso} onTriggerFullScreen={handleQuickFullScreenCapture} onSubmitPrompt={handleTaskSubmit} isBusy={isExecuting || sessionState?.status === 'awaiting_tier2'} />
+            <ContextualPromptBar key={composerVersion} initialPrompt={workspaceDraft} isDarkMode={isDarkMode} attachments={attachments} onRemoveAttachment={handleRemoveAttachment} onClearAttachments={handleClearAttachments} onTriggerLasso={handleTriggerLasso} onTriggerFullScreen={handleQuickFullScreenCapture} onSubmitPrompt={handleTaskSubmit} isBusy={isExecuting || sessionState?.status === 'awaiting_tier2'} />
             <div className="composer-hint"><span>Give it context. Let Horizon help.</span><span><kbd>Enter</kbd> to send · <kbd>Shift + Enter</kbd> for a new line</span></div>
           </div>
         </section>
@@ -639,6 +653,7 @@ function DesktopWorkspace() {
               isDarkMode={isDarkMode} 
               isBusy={savingConsent}
               error={consentError}
+              shortcutLabel={hotkeyStatus.label}
               onConsentGiven={handleConsentGiven}
               onConsentDeclined={() => setShowConsentModal(false)}
             />

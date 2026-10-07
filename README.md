@@ -8,7 +8,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Release-Windows%20Package%20(.exe)-0055A0?style=flat-square&logo=windows" alt="Windows Package" />
   <img src="https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20(x64)-blue?style=flat-square&logo=windows" alt="Windows Platform" />
-  <img src="https://img.shields.io/badge/Hotkey-Win%20%2B%20Shift%20%2B%20C-8CC1E9?style=flat-square" alt="Hotkey" />
+  <img src="https://img.shields.io/badge/Hotkey-Ctrl%20%2B%20Alt%20%2B%20H-8CC1E9?style=flat-square" alt="Hotkey" />
   <img src="https://img.shields.io/badge/UI-Google%20Search%20AI%20Mode-orange?style=flat-square&logo=google" alt="Google Search AI Mode" />
   <img src="https://img.shields.io/badge/Shell-Electron%20%7C%20TypeScript-informational?style=flat-square&logo=electron" alt="Electron Shell" />
   <img src="https://img.shields.io/badge/Perception-Local%20YOLOv8%20ONNX%20%2B%20RapidOCR-green?style=flat-square&logo=python" alt="Perception Service" />
@@ -19,13 +19,13 @@
 
 ## 📖 Overview
 
-**Project Horizon** is a multimodal Windows desktop assistant for asking about selected screen context, finding projects, and launching applications. Version 1.1.2 uses white and black glass themes with restrained blue accents, JetBrains Mono, the Horizon app icon, and restrained pixel accents. Questions and follow-ups can be answered directly in the floating assistant.
+**Project Horizon** is a multimodal Windows desktop assistant for asking about selected screen context, finding projects, and launching applications. Version 1.1.3 uses white and black glass themes with restrained blue accents, JetBrains Mono, the Horizon app icon, and restrained pixel accents. Questions and follow-ups can be answered directly in the floating assistant.
 
 After approval, Horizon registers the selected global shortcut, saves it in native app settings, and restores it on restart. Preferences show its actual availability. Closing the workspace keeps Horizon in the tray; use the tray's Quit command to stop it.
 
 ### Key Capabilities
 1. **Conversational AI Mode Chatbot**: Native, edge-to-edge desktop cockpit modeled after the Google Search AI Mode experience. View all past chat threads in the left sidebar, seamlessly continue previous discussions, and initiate new multimodal investigations with full context memory.
-2. **Floating Assistant (`Win + Shift + C`)**: Summon Horizon over your current app, ask a question, and read the answer in the same bar. Select screen context when needed and ask follow-ups without opening the full workspace. Preferences also offer `Ctrl + Space` and `Ctrl + Alt + H` when a shortcut is unavailable.
+2. **Floating Assistant (`Ctrl + Alt + H`)**: Summon Horizon over your current app, ask a question, and read the answer in the same bar. Circle area and Full screen are available immediately; plain-text questions need no screen context. Preferences also offer `Ctrl + Space` and `Win + Shift + C`, and preserve an existing working shortcut.
 3. **Air-Gapped Local Perception (Set-of-Marks)**: Runs an on-device YOLOv8n ONNX neural network and RapidOCR engine on `http://127.0.0.1:4200` using a silent, windowless background worker (`pythonw.exe` with zero console popups). Detects interactive buttons, input fields, containers, and text tags (`[0]`, `[1]`, `[2]...`) with zero screen data egress.
 4. **Direct Desktop Commands**: Simple app launches and screen capture use deterministic intent matching. Project-opening requests resolve an indexed folder and pass it directly to VS Code, like Explorer's Open with Code. Missing or ambiguous projects return clear errors.
 5. **Two-Tier Human-in-the-Loop Safety Gate**: Read-only actions run autonomously (Tier 1), while destructive operations (file deletions, disk modifications, arbitrary shell executions) unconditionally pause for explicit human approval via a secure modal (Tier 2).
@@ -41,15 +41,15 @@ Project Horizon is distributed as a packaged desktop application for 64-bit Wind
 
 ### 1. Download the Desktop Package
 Download the latest Windows installer or standalone package from the [GitHub Releases](https://github.com/jayyy255/project-horizon/releases) page:
-- **Private friends installer**: `Project-Horizon-Friends-Setup-1.1.2-x64.exe`, with owner-provided Gemini access and no user key setup. It uses a per-user wizard, installation-directory choice, desktop shortcut and Start menu entry.
+- **Private friends installer**: `Project-Horizon-Friends-Setup-1.1.3-x64.exe`, with owner-provided Gemini access and no user key setup. It uses a per-user wizard, installation-directory choice, desktop shortcut and Start menu entry.
 - Python, perception models and the native window verifier are bundled. End users do not need Node.js, Python, Miniconda or a source checkout.
 - Both build types exclude `.env` files and are currently unsigned. The explicitly opted-in friends build includes the owner's Gemini credential in its resources; keep that artifact private. The ordinary `package:win` build excludes owner credentials.
 
 ### 2. Launch & Approve Hotkey
 1. Run the downloaded setup executable.
 2. On first launch, Horizon will prompt for your authorization to register the global desktop shortcut:
-   - **Default Hotkey**: `Win + Shift + C`; Preferences can switch to `Ctrl + Space` or `Ctrl + Alt + H`.
-   - **Privacy Boundary**: Horizon never passively records your screen; screen buffers are captured exclusively when you press the hotkey or select a region.
+   - **Default Hotkey**: `Ctrl + Alt + H`; Preferences also offers `Ctrl + Space` and `Win + Shift + C`. A working saved choice is preserved. If Windows refuses a binding, Enable tries an available alternative and displays it.
+   - **Privacy Boundary**: Horizon never passively records your screen; screen context is captured only when you choose Circle area or Full screen. The hotkey alone opens a text prompt.
 3. Read the first-run disclosures, select the consent checkbox, and click **Continue**. The shortcut registers after that choice.
 4. The friends build shows **Gemini access included** in Preferences → Inference Engine. No user API key is needed. In a standard build, a user can save a personal key with Windows-backed encryption.
 5. If your projects are outside the discovered locations, add their parent folder in **Preferences → Project Roots**.
@@ -58,8 +58,9 @@ Download the latest Windows installer or standalone package from the [GitHub Rel
 - **View Past Chats**: All prior questions, code explanations, and automation summaries appear in the **Past Chats** sidebar with timestamps, turn counts, and crop thumbnails.
 - **Continue Any Conversation**: Click any past session to load its full message stream, review previous answers, and type follow-up questions.
 - **Start a New Chat**: Click the **"+ New Chat"** button at the top of the sidebar.
-- **Floating answers**: Press the selected hotkey, type a prompt and press Enter. The bar grows to display the response and retains context for follow-ups. Expand into the workspace only when desired.
-- **Circle-to-Search**: Use the floating bar's context menu to select a screen region, then ask about it in the same bar.
+- **Floating answers**: Press the selected hotkey, type a prompt and press Enter. The bar grows to display the response and retains context for follow-ups. Open in workspace starts a new chat and carries any unsent prompt and context.
+- **Circle-to-Search**: Choose Circle area in the floating bar, draw around a screen region, select Use selection, then ask about it in the same bar. Full screen attaches the display instead.
+- **Image response speed**: Screen questions use a direct Gemini Flash Lite request with compressed image input. Horizon stops a slow image request after a 6.5-second processing budget and displays a retry message. Completed answers depend on the network and provider; seven-second completion is a target, not a guarantee.
 
 The temporary friends build applies local limits of 10 Gemini model calls per minute and 100 per rolling 24 hours, saved across restarts. Each planning turn consumes a call. Requests have a brief submit cooldown and capped output length. These local limits can be bypassed by someone who extracts the bundled key; shared server enforcement is planned when hosting is selected. Google's project-level quotas remain the provider-side limits.
 

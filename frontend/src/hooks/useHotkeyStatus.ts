@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { HOTKEY_OPTIONS, HotkeyStatus } from '@shared/hotkeys';
+import { DEFAULT_HOTKEY, HotkeyStatus } from '@shared/hotkeys';
 
 export function useHotkeyStatus() {
-  const [status, setStatus] = useState<HotkeyStatus>({ approved: false, active: false, ...HOTKEY_OPTIONS[0] });
+  const [status, setStatus] = useState<HotkeyStatus>({ approved: false, active: false, ...DEFAULT_HOTKEY });
   const [loading, setLoading] = useState(Boolean(window.horizonAPI?.getHotkeyStatus));
   const [error, setError] = useState('');
   const update = useCallback((next: HotkeyStatus) => {

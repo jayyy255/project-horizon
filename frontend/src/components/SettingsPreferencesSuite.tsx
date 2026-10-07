@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Sliders, Keyboard, FolderGit2, Cpu, Folder, Plus } from 'lucide-react';
 import { useHotkeyStatus } from '../hooks/useHotkeyStatus';
-import { HOTKEY_OPTIONS } from '@shared/hotkeys';
+import { DEFAULT_HOTKEY, HOTKEY_OPTIONS } from '@shared/hotkeys';
 interface SettingsPreferencesSuiteProps { isDarkMode: boolean; onSaveSettings?: (settings: Record<string, unknown>) => void; }
 export function SettingsPreferencesSuite({ isDarkMode }: SettingsPreferencesSuiteProps) {
   const [activeTab, setActiveTab] = useState('hotkeys');
@@ -31,7 +31,7 @@ export function SettingsPreferencesSuite({ isDarkMode }: SettingsPreferencesSuit
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not save the key.'); }
     finally { setSavingKey(false); }
   };
-  const changeHotkey = async (accelerator: string) => {
+  const changeHotkey = async (accelerator?: string) => {
     setSavingShortcut(true); setError('');
     try {
       const result = await registerShortcut(accelerator);
@@ -39,13 +39,29 @@ export function SettingsPreferencesSuite({ isDarkMode }: SettingsPreferencesSuit
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not register shortcut.'); }
     finally { setSavingShortcut(false); }
   };
-  const cycleHotkey = () => changeHotkey(HOTKEY_OPTIONS[(HOTKEY_OPTIONS.findIndex(option => option.accelerator === shortcut.accelerator) + 1) % HOTKEY_OPTIONS.length].accelerator);
   return <div className={`preferences-panel w-[720px] max-w-full h-[490px] flex flex-col overflow-hidden rounded-2xl border ${isDarkMode ? 'liquid-glass-dark text-slate-100' : 'liquid-glass-light text-slate-900'}`}>
     <div className="px-6 py-5 border-b border-slate-500/15 flex items-center gap-3"><Sliders size={19} className="text-[var(--muted)]" /><div><h3 className="text-sm font-medium">Preferences &amp; Controls</h3><p className="text-[11px] text-[var(--muted)] mt-1">Make Horizon fit your desktop.</p></div></div>
     <div className="flex flex-1 min-h-0"><nav className="w-48 p-3 border-r border-slate-500/15 space-y-1">
       {[{id:'hotkeys',label:'Hotkey Trigger',Icon:Keyboard},{id:'roots',label:'Project Roots',Icon:FolderGit2},{id:'backend',label:'Inference Engine',Icon:Cpu}].map(({id,label,Icon}) => <button key={id} onClick={() => setActiveTab(id)} className={`flex items-center gap-2.5 w-full px-3 py-3 rounded-lg text-xs text-left ${activeTab === id ? 'bg-slate-400/10' : 'text-[var(--muted)] hover:bg-slate-400/5'}`}><Icon size={15} />{label}</button>)}
     </nav><div className="flex-1 min-w-0 p-6 overflow-auto">
-      {activeTab === 'hotkeys' && <div><h4 className="text-sm font-medium">Floating Assistant Hotkey</h4><p className="text-xs text-[var(--muted)] mt-2 leading-relaxed">Summon Horizon over any app. Keep it running in the tray; closing the workspace leaves your shortcut active.</p><div className="flex items-center gap-3 mt-6"><kbd className="px-4 py-3 rounded-xl border border-slate-500/20 text-xs">{shortcut.label}</kbd><button disabled={savingShortcut || checkingShortcut} className="px-3 py-2 text-xs text-[var(--muted)] hover:text-[var(--foreground)] disabled:opacity-40" onClick={cycleHotkey}>Cycle Hotkey</button></div><p role="status" className="text-xs text-[var(--muted)] mt-4">{checkingShortcut ? 'Checking shortcut…' : savingShortcut ? 'Registering…' : shortcut.active ? 'Active across Windows' : 'Not active'}</p>{!shortcut.active && <button disabled={savingShortcut || checkingShortcut} className="mt-4 rounded-lg border border-slate-500/20 px-3 py-2 text-xs" onClick={() => void changeHotkey(shortcut.accelerator)}>Enable shortcut</button>}<p className="text-[11px] text-[var(--muted)] mt-5 leading-relaxed">If another app uses the same keys, cycle to a different shortcut. Your selected shortcut is restored when Horizon starts.</p></div>}
+      {activeTab === 'hotkeys' && <div>
+        <h4 className="text-sm font-medium">Floating Assistant Hotkey</h4>
+        <p className="text-xs text-[var(--muted)] mt-2 leading-relaxed">Summon Horizon over any app. Keep it running in the tray; closing the workspace leaves your shortcut active.</p>
+        <label className="block mt-6">
+          <span className="block text-[11px] text-[var(--muted)] mb-2">Shortcut</span>
+          <select aria-label="Floating assistant shortcut" value={shortcut.accelerator} disabled={savingShortcut || checkingShortcut}
+            onChange={event => void changeHotkey(event.target.value)} className="rounded-xl border border-slate-500/20 bg-transparent px-4 py-3 text-xs disabled:opacity-40">
+            {HOTKEY_OPTIONS.map(option => <option key={option.accelerator} value={option.accelerator}>{option.label}</option>)}
+          </select>
+        </label>
+        <p role="status" className="text-xs text-[var(--muted)] mt-4">{checkingShortcut ? 'Checking shortcut…' : savingShortcut ? 'Registering…' : shortcut.active ? 'Active across Windows' : 'Not active'}</p>
+        {shortcut.notice && <p className="text-[11px] text-[var(--accent)] mt-3 leading-relaxed">{shortcut.notice}</p>}
+        {!shortcut.active && <div className="flex flex-wrap gap-3 mt-4">
+          <button disabled={savingShortcut || checkingShortcut} className="rounded-lg border border-slate-500/20 px-3 py-2 text-xs disabled:opacity-40" onClick={() => void changeHotkey()}>Enable shortcut</button>
+          {shortcut.accelerator !== DEFAULT_HOTKEY.accelerator && <button disabled={savingShortcut || checkingShortcut} className="text-xs text-[var(--accent)] disabled:opacity-40" onClick={() => void changeHotkey(DEFAULT_HOTKEY.accelerator)}>Use {DEFAULT_HOTKEY.label}</button>}
+        </div>}
+        <p className="text-[11px] text-[var(--muted)] mt-5 leading-relaxed">Enable tries available alternatives if your shortcut is blocked. Your working choice is saved and restored when Horizon starts.</p>
+      </div>}
       {activeTab === 'roots' && <div><div className="flex items-center justify-between"><h4 className="text-sm font-medium">Indexed Project Roots</h4><button disabled={!window.horizonAPI?.addWorkspaceRoot} onClick={async () => { try { const next = await window.horizonAPI?.addWorkspaceRoot?.(); if (next) setRoots(next); } catch { setError('Could not index the selected folder.'); } }} className="flex items-center gap-1.5 text-xs text-[var(--muted)] disabled:opacity-40"><Plus size={14} />Add Path</button></div><p className="text-xs text-[var(--muted)] my-3 leading-relaxed">Choose the folders Horizon can search for projects and workspaces.</p>{roots.length === 0 && <p className="text-xs text-[var(--muted)] mt-6">No workspace folders available.</p>}{roots.map(root => <div key={root} className="flex items-center gap-2 p-3 mt-2 rounded-xl border border-slate-500/15 text-[11px] font-mono break-all"><Folder size={15} className="flex-shrink-0 text-[var(--muted)]" />{root}</div>)}</div>}
       {activeTab === 'backend' && <div><h4 className="text-sm font-medium">Inference Engine</h4><p className="text-xs text-[var(--muted)] mt-2 leading-relaxed">Screen elements are detected locally. Gemini reasons about your task and proposes actions.</p>
         {ownerProvided ? <div className="p-4 border border-slate-500/15 rounded-xl mt-5"><h5 className="text-xs">Gemini access included</h5><p className="text-[11px] text-[var(--muted)] mt-3 leading-relaxed">Provided by Horizon. Ask a question or attach a screen selection to get an answer—no API key setup needed.</p></div> : <form className="mt-5" onSubmit={e => { e.preventDefault(); void saveKey(apiKey); }}>

@@ -8,6 +8,21 @@ import { seedConversations } from './fixtures';
 beforeEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
 
 describe('Chat, Screen Capture, Multi-Attachments & Auto-Dismiss E2E Tests', () => {
+  it('workspace requests create a new conversation without replacing previous history and carry the unsent draft', async () => {
+    seedConversations();
+    let requestChat: any;
+    window.horizonAPI = { onDesktopCaptured: () => () => {}, onOverlayToggled: () => () => {}, onAreaAttached: () => () => {}, onWorkspaceChatRequested: (callback: any) => { requestChat = callback; return () => {}; } } as any;
+    render(<App />);
+    const previous = localStorage.getItem('horizon_active_session_id');
+    fireEvent(window, new Event('focus')); // Listener is installed before the IPC request.
+    const { act } = await import('@testing-library/react');
+    act(() => requestChat({ newChat: true, draft: 'Explain my selection', attachments: [{ id: 'crop', label: 'Screen area', type: 'crop' }] }));
+    await waitFor(() => expect(localStorage.getItem('horizon_active_session_id')).not.toBe(previous));
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe('Explain my selection');
+    expect(JSON.parse(localStorage.getItem('horizon_chat_sessions')!)).toHaveLength(3);
+    expect(screen.queryByText('The shader requires a precision declaration.')).toBeNull();
+    delete window.horizonAPI;
+  });
   it('renders multi-attachment chips with individual remove buttons and triggers clear-all', () => {
     const mockAttachments: ScreenAttachment[] = [
       { id: 'att-1', label: 'Screen Area 1', type: 'crop', coords: { x: 100, y: 100, w: 200, h: 150 } },

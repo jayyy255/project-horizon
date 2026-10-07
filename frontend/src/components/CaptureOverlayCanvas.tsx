@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { RotateCcw, Monitor, Crop, Check } from 'lucide-react';
-import { GeminiSparkle } from './GeminiSparkle';
+import { RotateCcw, Monitor, Crop, Check, X } from 'lucide-react';
+import { HorizonMark } from './HorizonMark';
 import { captureRealDesktop } from '../utils/capture';
 import { computeAABB, generateCatmullRomSVGPath, Point, BoundingBox } from '@shared/aabb';
 
@@ -269,189 +269,29 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
   const svgPath = points.length >= 2 ? generateCatmullRomSVGPath(points, !isDrawing) : '';
 
   return (
-    <div 
-      className={
-        isFullScreenOverlay 
-          ? 'fixed inset-0 w-screen h-screen z-50 overflow-hidden select-none bg-black/90 cursor-crosshair'
-          : 'w-full max-w-4xl relative rounded-3xl overflow-hidden border border-[#8CC1E9]/35 dark:border-slate-800 shadow-2xl'
-      }
-    >
-      {/* Desktop Background Canvas / Real Captured Screenshot */}
-      <div 
-        ref={containerRef}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        className={`w-full relative select-none transition-colors overflow-hidden touch-none ${
-          isFullScreenOverlay ? 'h-screen w-screen' : 'h-[460px] cursor-crosshair'
-        }`}
-        style={{
-          background: isDarkMode 
-            ? 'radial-gradient(ellipse at 60% 40%, #12284B 0%, #090a0d 100%)' 
-            : 'radial-gradient(ellipse at 60% 40%, #ffffff 0%, #f0f6fa 100%)'
-        }}
-      >
-        {/* Real Captured Desktop Bitmap (Actual live desktop pixels) */}
-        {realScreenshot ? (
-          <img 
-            ref={imgRef}
-            src={realScreenshot} 
-            alt="Real Desktop Capture" 
-            className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none brightness-95 animate-fade-in"
-          />
-        ) : (
-          /* Subtle Grid Pattern fallback if loading or in standalone web mode */
-          <div 
-            className="absolute inset-0 opacity-20 pointer-events-none"
-            style={{
-              backgroundImage: `linear-gradient(to right, ${isDarkMode ? '#8CC1E9' : '#0055A0'} 1px, transparent 1px), linear-gradient(to bottom, ${isDarkMode ? '#8CC1E9' : '#0055A0'} 1px, transparent 1px)`,
-              backgroundSize: '24px 24px'
-            }}
-          />
-        )}
-
-        {/* Real Screen Capture Indicator Badge */}
-        <div className="absolute top-4 left-4 z-20 flex items-center gap-2.5 pointer-events-none">
-          <span className="flex h-2.5 w-2.5 relative">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#8CC1E9] opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-gradient-to-r from-[#8CC1E9] via-[#438BC4] to-[#FFF8E7]"></span>
-          </span>
-          <span className={`px-3 py-1 rounded-full text-[11px] font-mono tracking-wide border flex items-center gap-2 backdrop-blur-md ${
-            isDarkMode ? 'liquid-glass-dark text-slate-200 border-[#8CC1E9]/30 shadow-lg' : 'liquid-glass-light text-slate-800 font-medium shadow-sm border-[#8CC1E9]/40'
-          }`}>
-            <GeminiSparkle size={13} />
-            <span>
-              {isCapturing ? (
-                'Capturing real Windows desktop...'
-              ) : realScreenshot && captureDetails ? (
-                `Desktop Capture · ${captureDetails.width}×${captureDetails.height}px (${captureDetails.label})`
-              ) : (
-                'Lasso Active · Click & Drag anywhere to circle'
-              )}
-            </span>
-          </span>
-        </div>
-
-        {/* Interactive Freehand Catmull-Rom Curve & AABB Bounding Box */}
-        <svg className="absolute inset-0 w-full h-full pointer-events-none z-10">
-          <defs>
-            <linearGradient id="horizonLassoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#8CC1E9" />
-              <stop offset="35%" stopColor="#438BC4" />
-              <stop offset="70%" stopColor="#0055A0" />
-              <stop offset="100%" stopColor="#FFF8E7" />
-            </linearGradient>
-            <filter id="horizonGlow" x="-30%" y="-30%" width="160%" height="160%">
-              <feGaussianBlur stdDeviation="3.5" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
-
-          {/* Catmull-Rom smooth freehand stroke */}
-          {svgPath && (
-            <path
-              d={svgPath}
-              fill="rgba(140, 193, 233, 0.12)"
-              stroke="url(#horizonLassoGrad)"
-              strokeWidth="2.5"
-              filter="url(#horizonGlow)"
-              className={isDrawing ? '' : 'animate-pulse'}
-            />
-          )}
-
-          {/* Bounding Box (AABB + 12px padding per §3.1) */}
-          {boundingBox && boundingBox.w > 0 && boundingBox.h > 0 && (
-            <g>
-              <rect
-                x={boundingBox.x}
-                y={boundingBox.y}
-                width={boundingBox.w}
-                height={boundingBox.h}
-                fill="none"
-                stroke="#8CC1E9"
-                strokeWidth="1.5"
-                strokeDasharray="6 4"
-                className="opacity-90"
-              />
-              {/* Coordinate Pill Badge */}
-              <foreignObject
-                x={Math.max(4, boundingBox.x)}
-                y={Math.max(4, boundingBox.y - 26)}
-                width={Math.max(160, boundingBox.w)}
-                height="24"
-              >
-                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#0055A0]/80 backdrop-blur-md text-[10px] font-mono text-[#FFF8E7] border border-[#8CC1E9]/40 shadow-sm whitespace-nowrap">
-                  <Crop size={10} className="text-[#8CC1E9]" />
-                  <span>{boundingBox.w}×{boundingBox.h}px (+12px padding)</span>
-                </div>
-              </foreignObject>
-            </g>
-          )}
+    <div className={`capture-shell ${isDarkMode ? '' : 'light-mode'} ${isFullScreenOverlay ? 'capture-fullscreen' : 'capture-preview'}`}>
+      <div ref={containerRef} className="capture-canvas"
+        onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp}
+        onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
+        {realScreenshot && <img ref={imgRef} src={realScreenshot} alt="Real Desktop Capture" className="capture-desktop" />}
+        <div className="capture-shade" />
+        <header className="capture-topbar">
+          <div className="capture-brand"><HorizonMark size={24} /><div><strong>Screen context</strong><span>{isCapturing ? 'Capturing your screen…' : 'Circle what you want to ask about'}</span></div></div>
+          <button onClick={onExit} className="capture-dismiss" aria-label="Exit capture mode"><kbd>Esc</kbd><X size={16} /></button>
+        </header>
+        <svg className="capture-selection" aria-hidden="true">
+          {svgPath && <path d={svgPath} fill="rgba(140,193,233,.10)" stroke="#8cc1e9" strokeWidth="2.5" />}
+          {boundingBox && boundingBox.w > 0 && boundingBox.h > 0 && <rect x={boundingBox.x} y={boundingBox.y} width={boundingBox.w} height={boundingBox.h} rx="8" fill="none" stroke="#8cc1e9" strokeWidth="1" strokeDasharray="5 5" />}
         </svg>
-
-        {/* Anchored Capture Toolbar */}
-        <div 
-          onClick={(e) => e.stopPropagation()}
-          className={`absolute top-4 right-4 z-30 flex items-center gap-2 p-1.5 rounded-2xl border shadow-2xl backdrop-blur-xl ${
-            isDarkMode ? 'liquid-glass-dark text-slate-200 border-[#8CC1E9]/30' : 'liquid-glass-light text-slate-800 border-[#8CC1E9]/35'
-          }`}
-        >
-          {onAttachArea && (
-            <>
-              {boundingBox && boundingBox.w > 0 && (
-                <button
-                  onClick={handleAttachSelection}
-                  className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-[#0055A0] via-[#438BC4] to-[#8CC1E9] text-[#FFF8E7] flex items-center gap-1.5 shadow-md shadow-[#438BC4]/30 hover:brightness-110 transition-all border border-[#FFF8E7]/30"
-                >
-                  <Check size={13} />
-                  <span>Attach Selection ({boundingBox.w}×{boundingBox.h})</span>
-                </button>
-              )}
-              <button
-                onClick={handleAttachFullScreen}
-                className="px-3 py-1.5 rounded-xl text-xs font-medium border border-slate-300 dark:border-slate-700 hover:border-[#8CC1E9] text-slate-700 dark:text-slate-200 transition-all flex items-center gap-1.5"
-              >
-                <Monitor size={12} />
-                <span>Attach Full Screen</span>
-              </button>
-            </>
-          )}
-
-          {points.length > 0 && (
-            <button onClick={handleClearLasso} className="px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 text-slate-400 hover:bg-slate-400/10" title="Clear current selection"><RotateCcw size={13} /><span>Clear</span></button>
-          )}
-
-          <div className="w-[1px] h-4 bg-slate-200 dark:bg-slate-700" />
-
-          <button
-            onClick={onExit}
-            className="px-2.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1 text-slate-400 hover:text-[#8CC1E9] transition-colors"
-            title="Exit capture mode"
-          >
-            <kbd className="text-[10px] font-mono px-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">ESC</kbd>
-            <span>Exit</span>
-          </button>
-        </div>
-
-        {/* Drag Helper Callout for New Users */}
-        {points.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-            <div className={`px-4 py-2 rounded-2xl border backdrop-blur-md flex items-center gap-2 text-xs font-mono shadow-xl animate-fade-in ${
-              isDarkMode ? 'bg-[#0f141c]/80 text-[#8CC1E9] border-[#8CC1E9]/30' : 'bg-white/80 text-[#0055A0] border-[#8CC1E9]/40'
-            }`}>
-              <Crop size={14} className="animate-spin text-[#8CC1E9]" />
-              <span>Click and drag mouse anywhere to circle a region</span>
-            </div>
-          </div>
-        )}
+        {points.length === 0 && <div className="capture-instruction"><Crop size={20} /><strong>Circle an area</strong><span>Click and drag around anything on your screen.</span></div>}
+        <footer className="capture-toolbar" onClick={e => e.stopPropagation()}>
+          <div className="capture-summary"><span>{boundingBox ? 'Area selected' : 'Choose your context'}</span><small>{boundingBox ? `${boundingBox.w} × ${boundingBox.h} px` : 'Nothing is sent until you ask Horizon.'}</small></div>
+          {points.length > 0 && <button onClick={handleClearLasso} title="Clear current selection"><RotateCcw size={14} />Clear</button>}
+          {onAttachArea && <>
+            <button disabled={!realScreenshot} onClick={handleAttachFullScreen}><Monitor size={15} />Full screen</button>
+            <button className="capture-primary" disabled={!boundingBox || isDrawing || !realScreenshot} onClick={handleAttachSelection}><Check size={15} />Use selection</button>
+          </>}
+        </footer>
       </div>
     </div>
   );

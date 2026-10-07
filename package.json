@@ -1,6 +1,6 @@
 {
   "name": "project-horizon",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "System-Wide Multimodal Desktop & GUI Agent for Windows",
   "main": "dist-electron/electron/main.js",
   "scripts": {
@@ -18,8 +18,9 @@
     "test:agent": "npm run test --prefix backend/agent-service",
     "test:desktop:commands": "npm run build:electron && electron tests/command-regressions.electron.cjs",
     "test:desktop:hotkeys": "npm run build:electron && node --test tests/hotkeys.cjs tests/rate-limit.cjs",
+    "test:desktop:vision": "npm run build:electron && electron tests/vision-regressions.electron.cjs",
     "test:perception": "powershell -Command \"cd backend/perception-service; .venv/Scripts/pytest -v\"",
-    "test:all": "npm run test:frontend && npm run test:agent && npm run test:desktop:commands && npm run test:desktop:hotkeys && npm run test:perception",
+    "test:all": "npm run test:frontend && npm run test:agent && npm run test:desktop:commands && npm run test:desktop:hotkeys && npm run test:desktop:vision && npm run test:perception",
     "test:capture:pixels": "electron scripts/verify_real_desktop_pixels.js",
     "test:capture:latency": "electron scripts/benchmark_capture_latency.js",
     "test:capture:multimonitor": "electron scripts/verify_multimonitor.js",

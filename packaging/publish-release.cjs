@@ -54,6 +54,9 @@ async function main() {
   const repositoryInfo = await api('');
   if (friends && !repositoryInfo.private) throw new Error('The friends installer may only be published to the private repository.');
   const notes = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8').replace(/^# Changes\s*/, '').split(/\n## /)[0]
+    + (report.liveProvider && (!report.liveProvider.textAnswer || !report.liveProvider.imageAnswer)
+      ? '\n\nDuring packaging, Gemini did not answer every live check. Horizon reports a service timeout or outage within seven seconds; completed answers depend on Gemini availability. Native capture, shortcut, chat and controlled model-response checks passed. '
+      : '')
     + '\n\nDownload the x64 setup executable below. Run the setup wizard and approve first-run consent. '
     + (friends ? 'This temporary friends build includes owner-provided Gemini access; users do not enter an API key. Keep this installer private. '
       : 'Enter your own Gemini API key in Preferences → Inference Engine. ')

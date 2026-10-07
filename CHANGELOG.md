@@ -1,5 +1,15 @@
 # Changes
 
+## 1.1.3
+
+- Enable shortcut recovers from an unavailable binding by registering and saving an available alternative. Preferences shows the actual shortcut in a selector, reports recovery, and preserves an existing working choice on upgrade. New setups default to Ctrl + Alt + H.
+- The floating bar offers Circle area and Full screen immediately, with screen context optional. Full-screen capture briefly hides the bar to keep Horizon out of the attachment. New selections start with a clear canvas; cancellation returns to the bar.
+- Open in workspace starts a new conversation, carries the unsent prompt and context, and preserves earlier chats.
+- Screen selection now shares Horizon's black/white glass surfaces, logo, JetBrains Mono and restrained blue selection line.
+- Image questions go directly to Gemini Flash Lite without waiting for local OCR or tool-planner JSON. Images are resized to a maximum 1600-pixel edge and compressed for upload. The verified 3.1 Flash Lite model is used first; 3.5 Flash Lite is tried after temporary service failures. Provider failures show their actual category. Slow image requests stop after a 6.5-second processing budget with a retry message; a completed answer within seven seconds remains dependent on Gemini and connectivity.
+
+Validation: 43 frontend, 33 desktop-command, 20 hotkey/rate-limit and 13 image regressions passed. Native UI tests verified shortcut recovery, capture, cancellation, theme changes and new-chat transfer. Three live synthetic repository-page questions completed in 3.99 s, 1.89 s and 1.70 s. These timings are samples, not a guaranteed cloud response time. Later checks observed HTTP 503 and a 6.5-second timeout from Gemini; the installed key remained valid. The verified 3.1 Flash Lite endpoint answered a direct image probe in 3.29 seconds. The final packaged executable passed all 32 checks: live text answers and follow-ups worked, and a repository image question returned in 4.34 seconds after the first model returned HTTP 503 and the fallback model answered. The packaged report records live provider availability separately from the controlled UI checks.
+
 ## 1.1.2
 
 - White light mode and black dark mode share neutral glass surfaces, legible foregrounds and restrained blue accents from the Horizon logo. Preferences, consent, history and execution details follow the palette.

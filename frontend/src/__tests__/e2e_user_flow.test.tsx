@@ -105,11 +105,10 @@ describe('Project Horizon Frontend E2E User Journey & Safety Gating Flows', () =
     fireEvent.click(settingsBtn);
 
     // Hotkey default check
-    expect(screen.getByText('Win + Shift + C')).toBeDefined();
+    expect((screen.getByRole('combobox') as HTMLSelectElement).value).toBe('CommandOrControl+Alt+H');
 
     // Cycle Hotkey
-    const cycleBtn = screen.getByText('Cycle Hotkey');
-    fireEvent.click(cycleBtn);
+    fireEvent.change(screen.getByRole('combobox'), {target:{value:'CommandOrControl+Space'}});
     await waitFor(() => expect(screen.getByText('Ctrl + Space')).toBeDefined());
 
     // Switch to Project Roots tab

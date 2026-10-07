@@ -50,6 +50,7 @@ async function launch() {
   await new Promise((resolve, reject) => { socket.addEventListener('open', resolve, { once: true }); socket.addEventListener('error', reject, { once: true }); });
   socket.addEventListener('message', event => { const response = JSON.parse(event.data), item = pending.get(response.id); if (item) { clearTimeout(item.timer); pending.delete(response.id); response.error ? item.reject(new Error(response.error.message)) : item.resolve(response.result); } });
   await until(() => renderer('Boolean(window.horizonAPI && document.querySelector(".horizon-app"))'));
+  await evaluate(`(()=>{global.__testModelRequests=[];const request=global.fetch;global.fetch=async(...args)=>{const url=String(args[0]);if(!url.includes('generativelanguage.googleapis.com'))return request(...args);const item={model:new URL(url).pathname.split('/').at(-1)};global.__testModelRequests.push(item);try{const response=await request(...args);item.status=response.status;const data=await response.clone().json().catch(()=>({}));item.providerCode=data.error?.code;item.providerStatus=data.error?.status;item.finishReason=data.candidates?.[0]?.finishReason;item.parts=data.candidates?.[0]?.content?.parts?.map(part=>({thought:part.thought,textLength:part.text?.length,keys:(()=>{try{return Object.keys(JSON.parse(part.text))}catch{return undefined}})()}));return response;}catch(error){item.failure=error.name;item.code=error.cause?.code;throw error;}};return true;})()`);
 }
 async function stopApp() {
   if (socket) { await evaluate(`setTimeout(()=>process.mainModule.require('electron').app.quit(),50);true` ).catch(() => {}); socket.close(); socket = null; }
@@ -78,8 +79,12 @@ async function send(prompt) {
     check('Fresh profile receives owner access without revealing the key', access.configured && access.ownerProvided && Object.keys(access).sort().join(',') === 'configured,ownerProvided');
     const initial = await renderer('window.horizonAPI.getHotkeyStatus()');
     check('Shortcut stays disabled before approval', !initial.approved && !initial.active);
+    check('New profiles use Ctrl + Alt + H', initial.accelerator === 'CommandOrControl+Alt+H');
+    await evaluate(`(()=>{const registry=process.mainModule.require('electron').globalShortcut;const register=registry.register.bind(registry);registry.register=(key,callback)=>key==='Super+Shift+C'?false:register(key,callback);return true;})()`);
     const preferred = await renderer(`window.horizonAPI.approveHotkey('Super+Shift+C')`);
-    check('Default shortcut registration truthfully reports availability', preferred.success === preferred.active && (preferred.success || Boolean(preferred.error)));
+    check('Unavailable Win shortcut is truthfully inactive', !preferred.success && !preferred.active && Boolean(preferred.error));
+    const recovered = await renderer('window.horizonAPI.approveHotkey()');
+    check('Enable recovers to a real registered alternative with a notice', recovered.success && recovered.active && recovered.accelerator === 'CommandOrControl+Alt+H' && Boolean(recovered.notice));
     const alternate = await renderer(`window.horizonAPI.approveHotkey('CommandOrControl+Alt+H')`);
     check('Alternative shortcut registers across Windows', alternate.success && alternate.active);
     check('Changing shortcut releases previous registration', !(await evaluate(`process.mainModule.require('electron').globalShortcut.isRegistered('Super+Shift+C')`)));
@@ -101,10 +106,19 @@ async function send(prompt) {
     await renderer('window.horizonAPI.toggleFloatingBar()');
     await until(() => renderer(`Boolean(document.querySelector('.floating-panel'))`, true));
     const result = await send('What is 2 + 2? Reply with the number only and do not use any desktop tools.');
-    check('Live Gemini answer appears inside the floating bar', /\b4\b|four/i.test(result), { answer: result });
+    const liveTextAnswer = /\b4\b|four/i.test(result);
+    report.liveProvider = { textAnswer: liveTextAnswer, textResult: result };
+    if (liveTextAnswer) check('Live Gemini answer appears inside the floating bar', true, { answer: result });
+    else {
+      check('Packaged bar reports a real Gemini service failure without blaming the key', /Gemini (?:is temporarily busy|took too long|returned no completed answer)|Could not connect to Gemini/.test(result) && !/configuration|Ollama/.test(result), { answer: result });
+      await evaluate(`(()=>{global.__testRealFetch=global.fetch;global.__testFixtureHistory=false;global.fetch=async(url,options)=>{if(String(url).includes('generativelanguage.googleapis.com')){const body=JSON.parse(options.body);const requestText=body.contents?.[0]?.parts?.[0]?.text||"";if(requestText.includes('What result did you just give'))global.__testFixtureHistory=requestText.includes('Earlier conversation')&&requestText.includes('assistant')&&requestText.includes('"text":"4"');return new Response(JSON.stringify({candidates:[{content:{parts:[{text:JSON.stringify({final_answer:'4'})}]}}]}),{status:200});}return global.__testRealFetch(url,options)};return true})()`);
+      await renderer(`document.querySelector('[aria-label="New floating conversation"]').click()`, true);
+      const fixtureAnswer = await send('What is 2 + 2? Reply with the number only and do not use any desktop tools.');
+      check('Packaged text response pipeline works with a controlled provider response', /\b4\b|four/i.test(fixtureAnswer));
+    }
     await sleep(1600);
     const followup = await send('What result did you just give me? Reply with the number only and do not use any desktop tools.');
-    check('Floating follow-up preserves context', /\b4\b|four/i.test(followup), { answer: followup });
+    check('Floating follow-up preserves context', /\b4\b|four/i.test(followup) && (liveTextAnswer || await evaluate('global.__testFixtureHistory===true')), { answer: followup, provider: liveTextAnswer ? 'live' : 'controlled' });
     const history = await renderer(`JSON.parse(localStorage.getItem('horizon_chat_sessions')).find(s=>s.id===localStorage.getItem('horizon_active_session_id')).messages`, true);
     check('Both questions share one persisted conversation', history.length === 4);
     const bounds = await evaluate(`process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>/#bar$/.test(w.webContents.getURL())).getBounds()`);
@@ -121,17 +135,43 @@ async function send(prompt) {
     await until(() => renderer(`document.documentElement.classList.contains('dark')`, true));
     check('Packaged floating assistant returns to black dark theme live', await renderer(`!document.querySelector('.floating-bar').classList.contains('light-mode')&&getComputedStyle(document.documentElement).getPropertyValue('--bg-app').trim()==='#080808'`, true));
     // Exercise real capture IPC with a synthetic image, without collecting the user's desktop.
-    const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jN3sAAAAASUVORK5CYII=';
-    await evaluate(`process.mainModule.require('electron').desktopCapturer.getSources=async()=>[{id:'screen:synthetic',name:'Synthetic test display',thumbnail:process.mainModule.require('electron').nativeImage.createFromDataURL(${JSON.stringify(pixel)})}];true`);
+    const pixel = 'data:image/png;base64,' + fs.readFileSync(path.join(repo, 'packaging/fixtures/synthetic-repository.png')).toString('base64');
+    await evaluate(`process.mainModule.require('electron').desktopCapturer.getSources=async()=>{const electron=process.mainModule.require('electron');global.__barHiddenDuringCapture=!electron.BrowserWindow.getAllWindows().find(w=>/#bar$/.test(w.webContents.getURL())).isVisible();return [{id:'screen:synthetic',name:'Synthetic repository screen',thumbnail:electron.nativeImage.createFromDataURL(${JSON.stringify(pixel)})}]};true`);
+    check('Floating bar offers direct context choices', await renderer(`Boolean(document.querySelector('[aria-label="Circle Area"]')&&document.querySelector('[aria-label="Full Screen"]'))`, true));
+    await renderer(`document.querySelector('[aria-label="Full Screen"]').click()`, true);
+    await until(() => renderer(`Boolean(document.querySelector('img[alt="Crop preview"]'))`, true));
+    check('Full-screen capture hides Horizon before reading the screen', await evaluate('global.__barHiddenDuringCapture===true'));
+    if (!liveTextAnswer) await evaluate('global.fetch=global.__testRealFetch;true');
+    const imageStart = performance.now();
+    const imageAnswer = await send('What is this?');
+    const imageLatency = Math.round(performance.now() - imageStart);
+    const liveImageAnswer = /github|repository/i.test(imageAnswer) && !(await renderer(`Boolean(document.querySelector('.message-error'))`, true));
+    report.liveProvider.imageAnswer = liveImageAnswer;
+    check(liveImageAnswer ? 'Packaged image question returns a real answer within seven seconds' : 'Packaged image question reports a timed-out or unavailable provider within seven seconds', imageLatency <= 7000 && (liveImageAnswer || /Gemini (?:is temporarily busy|took longer than 7 seconds)|Could not connect to Gemini/.test(imageAnswer)), { elapsedMs: imageLatency, answer: imageAnswer });
     const overlay = expression => evaluate(`process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>/#capture$/.test(w.webContents.getURL())).webContents.executeJavaScript(${JSON.stringify(expression)})`);
     await renderer('window.__testCaptureCount=0;window.horizonAPI.onAreaAttached(()=>window.__testCaptureCount++);true');
     await renderer('window.horizonAPI.triggerCapture()', true);
-    await overlay(`window.horizonAPI.attachArea(${JSON.stringify({type:'crop',label:'Synthetic crop',croppedDataUrl:pixel,coords:{x:0,y:0,w:1,h:1}})})`);
+    await until(() => overlay(`Boolean(document.querySelector('.capture-desktop'))`));
+    check('Packaged capture uses the Horizon logo and JetBrains Mono', await overlay(`Boolean(document.querySelector('.capture-brand .horizon-icon'))&&getComputedStyle(document.querySelector('.capture-shell')).fontFamily.includes('JetBrains Mono')`));
+    await overlay(`document.querySelector('.capture-canvas').dispatchEvent(new MouseEvent('mousedown',{bubbles:true,button:0,clientX:120,clientY:160}))`);
+    for (const [x,y] of [[600,160],[600,450],[120,450],[120,160]]) await overlay(`document.querySelector('.capture-canvas').dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:${x},clientY:${y}}))`);
+    await overlay(`document.querySelector('.capture-canvas').dispatchEvent(new MouseEvent('mouseup',{bubbles:true,button:0}))`);
+    await until(() => overlay(`!document.querySelector('.capture-primary').disabled`));
+    await overlay(`document.querySelector('.capture-primary').click()`);
     await until(() => renderer(`Boolean(document.querySelector('img[alt="Crop preview"]'))`, true));
     check('Circle selection returns to the floating bar while workspace is open', await evaluate(`process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>/#bar$/.test(w.webContents.getURL())).isVisible()`) && (await renderer('window.__testCaptureCount')) === 0);
     await renderer('window.horizonAPI.triggerCapture()', true);
+    await until(() => overlay(`!document.querySelector('.capture-selection path')&&document.querySelector('.capture-primary').disabled`));
+    check('A new capture starts with no stale circle', await overlay(`!document.querySelector('.capture-selection path')`));
     await overlay('window.horizonAPI.closeOverlay()');
     check('Cancelling circle selection restores the floating bar', await evaluate(`process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>/#bar$/.test(w.webContents.getURL())).isVisible()`));
+    const previousChat = await renderer('localStorage.getItem("horizon_active_session_id")');
+    const sessionCount = await renderer('JSON.parse(localStorage.getItem("horizon_chat_sessions")).length');
+    await renderer(`(()=>{const input=document.querySelector('textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'Explain this selection');input.dispatchEvent(new Event('input',{bubbles:true}));})()`, true);
+    await sleep(100);
+    await renderer(`document.querySelector('[aria-label="Open workspace"]').click()`, true);
+    await until(() => renderer(`localStorage.getItem('horizon_active_session_id')!==${JSON.stringify(previousChat)}`));
+    check('Packaged Open workspace starts a fresh chat and retains previous conversations', await renderer(`(()=>{const sessions=JSON.parse(localStorage.getItem('horizon_chat_sessions'));return sessions.length===${sessionCount + 1}&&sessions.find(s=>s.id===localStorage.getItem('horizon_active_session_id')).messages.length===0&&document.querySelector('textarea').value==='Explain this selection'&&Boolean(document.querySelector('img[alt="Crop preview"]'))})()`));
     const session = { profile, inspector: 'http://127.0.0.1:9232', pid: child.pid, stopFile: path.join(profile, 'finish.json') };
     fs.writeFileSync(path.join(repo, 'release/friends-verification-session.json'), JSON.stringify(session));
     if (process.argv.includes('--keep-open')) {
@@ -143,6 +183,7 @@ async function send(prompt) {
     report.passed = true;
   } catch (error) { report.error = error.stack; report.passed = false; }
   finally {
+    if (socket) report.modelRequests = await evaluate('global.__testModelRequests || []').catch(() => []);
     if (child && socket) await stopApp().catch(() => child?.kill());
     for (const item of pending.values()) clearTimeout(item.timer);
     socket?.close(); child?.kill(); worker?.kill();

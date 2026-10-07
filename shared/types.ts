@@ -42,6 +42,12 @@ export interface DesktopCaptureData {
   displayLabel: string;
 }
 
+export interface WorkspaceChatRequest {
+  newChat: true;
+  draft?: string;
+  attachments?: Array<{ id: string; label: string; type: 'crop' | 'fullscreen'; croppedDataUrl?: string; coords?: BoundingBox; timestamp?: number }>;
+}
+
 export interface HorizonAPI {
   getGeminiStatus?: () => Promise<{ configured: boolean; ownerProvided?: boolean }>;
   saveGeminiKey?: (key: string) => Promise<{ configured: boolean; ownerProvided?: boolean }>;
@@ -70,11 +76,12 @@ export interface HorizonAPI {
   approveHotkey?: (hotkey?: string) => Promise<HotkeyResult>;
   getHotkeyStatus?: () => Promise<HotkeyStatus>;
   onHotkeyStatus?: (callback: (status: HotkeyStatus) => void) => () => void;
-  openMainWindow?: () => Promise<void>;
+  openMainWindow?: (request?: WorkspaceChatRequest) => Promise<void>;
+  onWorkspaceChatRequested?: (callback: (request: WorkspaceChatRequest) => void) => () => void;
   hideFloatingBar?: () => Promise<void>;
   resizeFloatingBar?: (height: number) => Promise<void>;
   toggleFloatingBar?: () => Promise<void>;
-  triggerCapture?: () => Promise<void>;
+  triggerCapture?: () => Promise<boolean>;
 }
 
 declare global {
