@@ -8,6 +8,8 @@ import {
   Tray,
   Menu,
   nativeImage,
+  dialog,
+  shell,
 } from 'electron';
 import fs from 'fs';
 import path from 'path';
@@ -16,6 +18,8 @@ import { AgentHost } from './agent';
 import { runPackagedVerification } from './packagedVerification';
 import { loadGeminiKey, getGeminiStatus, saveGeminiKey } from './settings';
 import { HotkeyManager } from './hotkeys';
+import { ingestAttachment } from './attachments';
+import { LatencyTrace, latencyLogPath } from './latency';
 
 const ownsSingleInstance = app.requestSingleInstanceLock();
 if (!ownsSingleInstance) app.quit();
@@ -61,6 +65,7 @@ let tray: Tray | null = null;
 let agentHost: AgentHost | null = null;
 let isOverlayVisible = false;
 let isBarVisible = false;
+let floatingState = { completed: false, busy: false };
 let captureTarget: 'floating' | 'workspace' = 'workspace';
 let hotkeyManager: HotkeyManager;
 let isQuitting = false;
@@ -90,6 +95,7 @@ let lastCapturedData: {
   scaleFactor: number;
   sourceId: string;
   displayLabel: string;
+  traceId?: string;
 } | null = null;
 
 
@@ -98,14 +104,16 @@ let lastCapturedData: {
  * Captures real desktop pixels using Electron's desktopCapturer API.
  * Pulls native resolution buffer directly from Windows DWM.
  */
-async function captureRealDesktop(targetWindowName?: string): Promise<{
+async function captureRealDesktop(targetWindowName?: string, kind = 'fullscreen'): Promise<{
   dataUrl: string;
   width: number;
   height: number;
   scaleFactor: number;
   sourceId: string;
   displayLabel: string;
+  traceId?: string;
 }> {
+  const trace = new LatencyTrace(kind);
   const primaryDisplay = screen.getPrimaryDisplay();
   const scaleFactor = primaryDisplay.scaleFactor || 1;
   const width = Math.round(primaryDisplay.bounds.width * scaleFactor);
@@ -118,11 +126,11 @@ async function captureRealDesktop(targetWindowName?: string): Promise<{
   let displayLabel = 'Entire Screen';
 
   try {
-    const sources = await desktopCapturer.getSources({
-      types: targetWindowName ? ['window', 'screen'] : ['screen', 'window'],
+    const sources = await trace.measure('desktop_capture', () => desktopCapturer.getSources({
+      types: targetWindowName ? ['window', 'screen'] : ['screen'],
       thumbnailSize: { width, height },
       fetchWindowIcons: false,
-    });
+    }));
 
     if (sources && sources.length > 0) {
       // Exclude Horizon's OWN windows to prevent perception from inspecting agent itself
@@ -148,7 +156,7 @@ async function captureRealDesktop(targetWindowName?: string): Promise<{
       if (chosenSource && !chosenSource.thumbnail.isEmpty()) {
         sourceId = chosenSource.id;
         displayLabel = chosenSource.name || 'Entire Screen';
-        dataUrl = chosenSource.thumbnail.toDataURL();
+        dataUrl = await trace.measure('image_encoding', () => chosenSource!.thumbnail.toDataURL());
       }
     }
   } catch (err) {
@@ -157,6 +165,7 @@ async function captureRealDesktop(targetWindowName?: string): Promise<{
 
 
 
+  trace.save();
   if (!dataUrl) throw new Error('Windows did not return a screen image. Try capturing again.');
   lastCapturedData = {
     dataUrl,
@@ -165,6 +174,7 @@ async function captureRealDesktop(targetWindowName?: string): Promise<{
     scaleFactor,
     sourceId,
     displayLabel,
+    traceId: trace.id,
   };
 
   return lastCapturedData;
@@ -292,7 +302,7 @@ async function triggerRealCaptureAndShowOverlay(): Promise<boolean> {
     // Allow the floating assistant's dismissal to reach the compositor.
     await new Promise(resolve => setTimeout(resolve, 100));
     // 1. Capture real desktop screenshot first
-    const captureData = await captureRealDesktop();
+    const captureData = await captureRealDesktop(undefined, 'crop');
 
     // 2. Ensure overlay window exists
     if (!overlayWindow) {
@@ -403,6 +413,12 @@ function hideFloatingBar(): void {
 }
 
 function toggleFloatingBar(): void {
+  if (floatingState.completed && !floatingState.busy && barWindow && !barWindow.isDestroyed()) {
+    floatingState.completed = false;
+    barWindow.webContents.send('horizon:floating-new-chat');
+    showFloatingBar();
+    return;
+  }
   if (isBarVisible && barWindow && barWindow.isVisible()) {
     hideFloatingBar();
   } else {
@@ -543,6 +559,33 @@ app.whenReady().then(async () => {
   }
 
   // Setup IPC Handlers
+  const isChatWindow = (event: Electron.IpcMainInvokeEvent) => event.sender === mainWindow?.webContents || event.sender === barWindow?.webContents;
+  ipcMain.handle('horizon:set-floating-state', (event, state) => {
+    if (event.sender === barWindow?.webContents) floatingState = { completed: state?.completed === true, busy: state?.busy === true };
+  });
+  ipcMain.handle('horizon:choose-attachments', async event => {
+    if (!isChatWindow(event)) throw new Error('Attachments must be selected from Horizon.');
+    const owner = BrowserWindow.fromWebContents(event.sender)!;
+    const result = await dialog.showOpenDialog(owner, { title: 'Attach a PDF, image or text file', properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Supported documents and images', extensions: ['pdf','txt','md','csv','json','log','ts','tsx','js','jsx','py','css','html','xml','yaml','yml','toml','ini','sql','c','cpp','h','java','rs','go','png','jpg','jpeg','webp'] }] });
+    if (result.canceled) return [];
+    if (result.filePaths.length > 4) throw new Error('Choose up to four attachments.');
+    const attachments = [];
+    for (const file of result.filePaths) attachments.push(await ingestAttachment(file));
+    return attachments;
+  });
+  ipcMain.handle('horizon:get-latency-report', (event, id: string) => isChatWindow(event) ? LatencyTrace.get(id)?.report() || null : null);
+  ipcMain.handle('horizon:record-render-latency', (event, id: string, duration: number) => {
+    if (!isChatWindow(event) || !Number.isFinite(duration) || duration < 0 || duration > 60000) return;
+    const trace = LatencyTrace.get(id);
+    if (trace && !trace.report().stages.some(stage => stage.name === 'answer_render')) { trace.add('answer_render', duration); trace.save(); }
+  });
+  ipcMain.handle('horizon:open-latency-logs', async event => {
+    if (!isChatWindow(event)) return;
+    const file = latencyLogPath();
+    if (fs.existsSync(file)) shell.showItemInFolder(file);
+    else await shell.openPath(app.getPath('userData'));
+  });
   ipcMain.handle('horizon:get-hotkey-status', () => hotkeyManager.getStatus());
   ipcMain.handle('horizon:approve-hotkey', (_event, customHotkey?: string) => {
     const result = hotkeyManager.approve(customHotkey);
@@ -619,6 +662,10 @@ app.whenReady().then(async () => {
   });
 
   ipcMain.handle('horizon:attach-area', (_event, data) => {
+    if (_event.sender !== overlayWindow?.webContents) return false;
+    const trace = lastCapturedData?.traceId ? LatencyTrace.get(lastCapturedData.traceId) : undefined;
+    if (trace && Number.isFinite(data?.cropDurationMs)) { trace.add('crop_and_encode', Math.min(60000, Math.max(0, data.cropDurationMs))); trace.save(); }
+    data = { ...data, traceId: lastCapturedData?.traceId };
     console.log('[Project Horizon] Area attached from overlay:', data?.type, data?.coords);
     const target = captureTarget === 'floating' ? barWindow : mainWindow;
     target?.webContents.send('horizon:area-attached', data);

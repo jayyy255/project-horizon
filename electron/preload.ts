@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { Tier2ActionPayload, WorkspaceChatRequest } from '../shared/types';
+import { Tier2ActionPayload, WorkspaceChatRequest, ContextAttachment } from '../shared/types';
 
 export interface DesktopCaptureData {
   dataUrl: string;
@@ -8,9 +8,20 @@ export interface DesktopCaptureData {
   scaleFactor: number;
   sourceId: string;
   displayLabel: string;
+  traceId?: string;
 }
 
 contextBridge.exposeInMainWorld('horizonAPI', {
+  chooseAttachments: () => ipcRenderer.invoke('horizon:choose-attachments'),
+  openLatencyLogs: () => ipcRenderer.invoke('horizon:open-latency-logs'),
+  getLatencyReport: (id: string) => ipcRenderer.invoke('horizon:get-latency-report', id),
+  recordRenderLatency: (id: string, durationMs: number) => ipcRenderer.invoke('horizon:record-render-latency', id, durationMs),
+  setFloatingState: (state: { completed: boolean; busy: boolean }) => ipcRenderer.invoke('horizon:set-floating-state', state),
+  onFloatingNewChat: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('horizon:floating-new-chat', handler);
+    return () => ipcRenderer.removeListener('horizon:floating-new-chat', handler);
+  },
   getGeminiStatus: () => ipcRenderer.invoke('horizon:get-gemini-status'),
   saveGeminiKey: (key: string) => ipcRenderer.invoke('horizon:save-gemini-key', key),
   getWorkspaceRoots: () => ipcRenderer.invoke('horizon:get-workspace-roots'),
@@ -48,7 +59,7 @@ contextBridge.exposeInMainWorld('horizonAPI', {
   getSystemInfo: () => ipcRenderer.invoke('horizon:get-system-info'),
 
   // Step 4c: In-process agent coordinator IPC
-  executeTask: (payload: { prompt: string; sessionId?: string; images?: string[]; history?: Array<{role: 'user' | 'assistant'; text: string}> }) =>
+  executeTask: (payload: { prompt: string; sessionId?: string; images?: string[]; history?: Array<{role: 'user' | 'assistant'; text: string}>; attachments?: ContextAttachment[] }) =>
     ipcRenderer.invoke('horizon:execute-task', payload),
   resolveTier2: (payload: { actionId: string; authorized: boolean }) =>
     ipcRenderer.invoke('horizon:resolve-tier2', payload),

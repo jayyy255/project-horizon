@@ -1,5 +1,19 @@
 import type { HotkeyResult, HotkeyStatus } from './hotkeys';
 
+export interface LatencyStage { name: string; durationMs: number; status: 'ok' | 'error'; }
+export interface LatencyReport { id: string; source: string; stages: LatencyStage[]; totalMs: number; }
+export interface ContextAttachment {
+  id: string;
+  label: string;
+  type: 'crop' | 'fullscreen' | 'image' | 'pdf' | 'file';
+  croppedDataUrl?: string;
+  coords?: BoundingBox;
+  timestamp?: number;
+  documentId?: string;
+  traceId?: string;
+  safety?: string;
+}
+
 export interface SystemInfo {
   platform: string;
   arch: string;
@@ -40,15 +54,22 @@ export interface DesktopCaptureData {
   scaleFactor: number;
   sourceId: string;
   displayLabel: string;
+  traceId?: string;
 }
 
 export interface WorkspaceChatRequest {
   newChat: true;
   draft?: string;
-  attachments?: Array<{ id: string; label: string; type: 'crop' | 'fullscreen'; croppedDataUrl?: string; coords?: BoundingBox; timestamp?: number }>;
+  attachments?: ContextAttachment[];
 }
 
 export interface HorizonAPI {
+  chooseAttachments?: () => Promise<ContextAttachment[]>;
+  openLatencyLogs?: () => Promise<void>;
+  getLatencyReport?: (id: string) => Promise<LatencyReport | null>;
+  recordRenderLatency?: (id: string, durationMs: number) => Promise<void>;
+  setFloatingState?: (state: { completed: boolean; busy: boolean }) => Promise<void>;
+  onFloatingNewChat?: (callback: () => void) => () => void;
   getGeminiStatus?: () => Promise<{ configured: boolean; ownerProvided?: boolean }>;
   saveGeminiKey?: (key: string) => Promise<{ configured: boolean; ownerProvided?: boolean }>;
   getWorkspaceRoots?: () => Promise<string[]>;
@@ -67,7 +88,7 @@ export interface HorizonAPI {
   sendTier2Decision: (actionId: string, authorized: boolean) => Promise<void>;
   getSystemInfo: () => Promise<SystemInfo>;
   // In-process ReAct Agent methods (Step 4c)
-  executeTask: (payload: { prompt: string; sessionId?: string; images?: string[]; history?: Array<{role: 'user' | 'assistant'; text: string}> }) => Promise<any>;
+  executeTask: (payload: { prompt: string; sessionId?: string; images?: string[]; history?: Array<{role: 'user' | 'assistant'; text: string}>; attachments?: ContextAttachment[] }) => Promise<any>;
   resolveTier2: (payload: { actionId: string; authorized: boolean }) => Promise<any>;
   getAgentState: () => Promise<any>;
   searchIndexer: (payload: { query: string; limit?: number }) => Promise<any[]>;

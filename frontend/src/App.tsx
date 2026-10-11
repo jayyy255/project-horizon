@@ -9,6 +9,8 @@ import { FirstRunConsentModal } from './components/FirstRunConsentModal';
 import { SettingsPreferencesSuite } from './components/SettingsPreferencesSuite';
 import { SessionHistoryDrawer } from './components/SessionHistoryDrawer';
 import { FloatingBarWindow } from './components/FloatingBarWindow';
+import { TimingDetails } from './components/TimingDetails';
+import type { LatencyReport } from '@shared/types';
 import { 
   Sun, 
   Moon, 
@@ -65,6 +67,8 @@ function DesktopWorkspace() {
 
   // Screen attachments & chat visibility
   const [attachments, setAttachments] = useState<ScreenAttachment[]>([]);
+  const [attachmentBusy, setAttachmentBusy] = useState(false);
+  const [attachmentError, setAttachmentError] = useState('');
   const [workspaceDraft, setWorkspaceDraft] = useState('');
   const [composerVersion, setComposerVersion] = useState(0);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -78,6 +82,7 @@ function DesktopWorkspace() {
     attachments?: ScreenAttachment[];
     steps?: TraceStep[];
     status?: 'done' | 'working' | 'error';
+    latency?: LatencyReport;
   }
 
   interface FullChatSession {
@@ -160,7 +165,6 @@ function DesktopWorkspace() {
       }
       if (event.key === 'horizon_active_session_id' && event.newValue) {
         setActiveSessionId(event.newValue);
-        executionSessionRef.current = event.newValue;
       }
     };
     window.addEventListener('storage', syncStorage);
@@ -178,12 +182,17 @@ function DesktopWorkspace() {
 
   useEffect(() => {
     if (!sessionState || !['done', 'error', 'idle'].includes(sessionState.status)) return;
-    setChatSessions(prev => prev.map(s => s.id !== executionSessionRef.current ? s : {
-      ...s,
-      messages: s.messages.map(m => m.sender === 'assistant' && m.status === 'working' ? {
-        ...m, text: sessionState.currentNarration, status: sessionState.status === 'error' ? 'error' : 'done',
-      } : m),
-    }));
+    setChatSessions(prev => {
+      const target = prev.find(session => session.id === executionSessionRef.current);
+      // Another window's streamed reply must not rewrite stale workspace history.
+      if (!target?.messages.some(message => message.sender === 'assistant' && message.status === 'working')) return prev;
+      return prev.map(s => s.id !== executionSessionRef.current ? s : {
+        ...s,
+        messages: s.messages.map(m => m.sender === 'assistant' && m.status === 'working' ? {
+          ...m, text: sessionState.currentNarration, latency: sessionState.latency, status: sessionState.status === 'error' ? 'error' : 'done',
+        } : m),
+      });
+    });
   }, [sessionState]);
 
   // Automatically trigger Tier 2 Modal when backend signals awaiting_tier2
@@ -271,6 +280,7 @@ function DesktopWorkspace() {
     label: string; 
     coords?: { x: number; y: number; w: number; h: number };
     croppedDataUrl?: string;
+    traceId?: string;
   }) => {
     const newAtt: ScreenAttachment = {
       id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -278,6 +288,7 @@ function DesktopWorkspace() {
       type: data.type,
       coords: data.coords,
       croppedDataUrl: data.croppedDataUrl,
+      traceId: data.traceId,
       timestamp: Date.now()
     };
     setAttachments(prev => [...prev, newAtt]);
@@ -294,6 +305,7 @@ function DesktopWorkspace() {
             label: 'Full Screen',
             coords: { x: 0, y: 0, w: data.width, h: data.height },
             croppedDataUrl: data.dataUrl,
+            traceId: data.traceId,
           });
           return;
         }
@@ -350,6 +362,14 @@ function DesktopWorkspace() {
 
   const handleSelectSession = (sessionId: string) => {
     setActiveSessionId(sessionId);
+    setAttachments([...chatSessions.find(session => session.id === sessionId)?.messages || []].reverse().find(message => message.sender === 'user')?.attachments || []);
+  };
+  useEffect(() => { setAttachments([...chatSessions.find(session => session.id === activeSessionId)?.messages || []].reverse().find(message => message.sender === 'user')?.attachments || []); }, []);
+  const handleAttachFile = async () => {
+    setAttachmentError(''); setAttachmentBusy(true);
+    try { const items = await window.horizonAPI?.chooseAttachments?.(); if (items) setAttachments(prev => [...prev, ...items]); }
+    catch (error) { setAttachmentError(error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+': Error: /, '') : 'Could not inspect the file.'); }
+    finally { setAttachmentBusy(false); }
   };
 
   const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
@@ -370,7 +390,7 @@ function DesktopWorkspace() {
   };
 
   const handleTaskSubmit = async (prompt: string, atts: ScreenAttachment[]) => {
-    if (isExecuting || sessionState?.status === 'awaiting_tier2') return;
+    if (isExecuting || attachmentBusy || sessionState?.status === 'awaiting_tier2') return;
 
     const userMsg: ChatMessageItem = {
       id: `msg-${Date.now()}-user`,
@@ -411,20 +431,19 @@ function DesktopWorkspace() {
       }));
     }
 
-    const fullPrompt = atts.length > 0
-      ? `[${atts.map(a => a.type === 'crop' && a.coords ? `Crop (${a.coords.x},${a.coords.y},${a.coords.w}×${a.coords.h})` : a.label).join(', ')}]: ${prompt}`
-      : prompt;
+    const fullPrompt = prompt;
 
     const images = atts
       .map(a => a.croppedDataUrl)
       .filter((url): url is string => Boolean(url && url.startsWith('data:image/')));
 
-    setAttachments([]);
 
     try {
       executionSessionRef.current = targetSessionId;
       const history = currentSession?.messages.slice(-10).map(m => ({ role: m.sender, text: m.text }));
-      const state = await dispatchTask(fullPrompt, images.length > 0 ? images : undefined, history);
+      const state = await dispatchTask(fullPrompt, images.length > 0 ? images : undefined, history, atts);
+      const receivedAt = performance.now();
+      if (state.latency) requestAnimationFrame(() => requestAnimationFrame(() => void window.horizonAPI?.recordRenderLatency?.(state.latency!.id, performance.now() - receivedAt)));
       const resultText = state?.status === 'awaiting_tier2' ? 'Horizon needs your approval before continuing.' : state?.currentNarration || 'No response was returned by the agent. Please try again.';
 
       const assistantMsg: ChatMessageItem = {
@@ -433,6 +452,7 @@ function DesktopWorkspace() {
         text: resultText,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: state?.status === 'error' ? 'error' : state?.status === 'awaiting_tier2' ? 'working' : 'done',
+        latency: state.latency,
       };
 
       setChatSessions(prev => prev.map(s => {
@@ -589,6 +609,7 @@ function DesktopWorkspace() {
                 <div className="message-heading">{msg.sender === 'assistant' ? <><HorizonMark size={17} /><strong>Horizon</strong></> : <strong>You</strong>}<time>{msg.timestamp}</time></div>
                 {msg.attachments && msg.attachments.length > 0 && <div className="message-attachments">{msg.attachments.map(att => <div key={att.id} className="message-attachment">{att.croppedDataUrl && <img src={att.croppedDataUrl} alt={att.label} />}<span><Camera size={13} />{att.label}</span></div>)}</div>}
                 <div className={`message-body ${msg.status === 'error' ? 'message-error' : ''}`}>{msg.text}</div>
+                {msg.sender === 'assistant' && <TimingDetails report={msg.latency} />}
               </article>
             ))}
             {(isExecuting || sessionState?.status === 'working') && <div className="working-indicator" role="status"><HorizonMark size={18} /><span>{sessionState?.currentNarration || 'Thinking through your task…'}</span><span className="working-dots">···</span></div>}
@@ -596,8 +617,10 @@ function DesktopWorkspace() {
           <div className="composer-dock">
             {(sessionState || isExecuting) && <div className="trace-dock">{isTraceExpanded && <div className="trace-expanded"><ReActTracePanel isDarkMode={isDarkMode} steps={liveTraceSteps} onClose={() => setIsTraceExpanded(false)} /></div>}<HUDCollapsedChip isDarkMode={isDarkMode} isExpanded={isTraceExpanded} onToggleLogs={() => setIsTraceExpanded(prev => !prev)} currentNarration={sessionState?.currentNarration} status={sessionState?.status} /></div>}
             {lastError && <p role="alert" className="text-xs text-rose-400 mb-2">{lastError}</p>}
+            {attachmentError && <p role="alert" className="text-xs text-rose-400 mb-2">{attachmentError}</p>}
+            {attachmentBusy && <p role="status" className="composer-hint">Scanning and preparing your file…</p>}
             {(hotkeyError || consentError) && !showConsentModal && <div role="alert" className="text-xs text-rose-300 mb-3">{hotkeyError || consentError} <button className="underline" onClick={() => setShowSettingsModal(true)}>Open Preferences</button></div>}
-            <ContextualPromptBar key={composerVersion} initialPrompt={workspaceDraft} isDarkMode={isDarkMode} attachments={attachments} onRemoveAttachment={handleRemoveAttachment} onClearAttachments={handleClearAttachments} onTriggerLasso={handleTriggerLasso} onTriggerFullScreen={handleQuickFullScreenCapture} onSubmitPrompt={handleTaskSubmit} isBusy={isExecuting || sessionState?.status === 'awaiting_tier2'} />
+            <ContextualPromptBar key={composerVersion} initialPrompt={workspaceDraft} isDarkMode={isDarkMode} attachments={attachments} onRemoveAttachment={handleRemoveAttachment} onClearAttachments={handleClearAttachments} onTriggerLasso={handleTriggerLasso} onTriggerFullScreen={handleQuickFullScreenCapture} onAttachFile={() => void handleAttachFile()} onSubmitPrompt={handleTaskSubmit} isBusy={attachmentBusy || isExecuting || sessionState?.status === 'awaiting_tier2'} />
             <div className="composer-hint"><span>Give it context. Let Horizon help.</span><span><kbd>Enter</kbd> to send · <kbd>Shift + Enter</kbd> for a new line</span></div>
           </div>
         </section>

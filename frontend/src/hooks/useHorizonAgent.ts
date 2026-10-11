@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { agentClient, ReActSessionState } from '../services/agentClient';
+import type { ContextAttachment } from '@shared/types';
 
 export function useHorizonAgent() {
   const [isConnected, setIsConnected] = useState(false);
@@ -29,11 +30,11 @@ export function useHorizonAgent() {
     };
   }, []);
 
-  const dispatchTask = useCallback(async (prompt: string, images?: string[], history?: Array<{role: 'user' | 'assistant'; text: string}>) => {
+  const dispatchTask = useCallback(async (prompt: string, images?: string[], history?: Array<{role: 'user' | 'assistant'; text: string}>, attachments?: ContextAttachment[]) => {
     setIsExecuting(true);
     setLastError(null);
     try {
-      const state = await agentClient.executeTask(prompt, undefined, images, history);
+      const state = await agentClient.executeTask(prompt, undefined, images, history, attachments);
       setSessionState(state);
       return state;
     } catch (err: any) {

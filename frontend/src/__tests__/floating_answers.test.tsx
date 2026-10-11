@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { FloatingBarWindow } from '../components/FloatingBarWindow';
 const mock = vi.hoisted(() => ({ dispatch: vi.fn(), decide: vi.fn(), state: null as any }));
 vi.mock('../hooks/useHorizonAgent', () => ({ useHorizonAgent: () => ({ sessionState: mock.state, dispatchTask: mock.dispatch, submitTier2Decision: mock.decide }) }));
@@ -16,7 +16,7 @@ describe('Floating answers and follow-up conversation', () => {
     await waitFor(() => expect(window.horizonAPI?.triggerCapture).toHaveBeenCalledOnce());
     await waitFor(() => expect((screen.getByRole('button', { name: 'Full Screen' }) as HTMLButtonElement).disabled).toBe(false));
     send('A question without context');
-    await waitFor(() => expect(mock.dispatch).toHaveBeenCalledWith('A question without context', [], []));
+    await waitFor(() => expect(mock.dispatch).toHaveBeenCalledWith('A question without context', [], [], []));
   });
   it('opens a fresh workspace chat with the unsent draft and selected screen context', async () => {
     window.horizonAPI = { openMainWindow: vi.fn(), captureDesktop: vi.fn().mockResolvedValue({ dataUrl: 'data:image/png;base64,test', displayLabel: 'Desktop' }) } as any;
@@ -35,7 +35,7 @@ describe('Floating answers and follow-up conversation', () => {
     expect(window.horizonAPI?.openMainWindow).not.toHaveBeenCalled();
     const id = localStorage.getItem('horizon_active_session_id'); send('Why?');
     await waitFor(() => expect(screen.getByText('Because of the calculation.')).toBeDefined());
-    expect(mock.dispatch).toHaveBeenLastCalledWith('Why?', [], [{ role: 'user', text: 'What is the answer?' }, { role: 'assistant', text: 'The answer is 42.' }]);
+    expect(mock.dispatch).toHaveBeenLastCalledWith('Why?', [], [{ role: 'user', text: 'What is the answer?' }, { role: 'assistant', text: 'The answer is 42.' }], []);
     expect(localStorage.getItem('horizon_active_session_id')).toBe(id);
     const sessions = JSON.parse(localStorage.getItem('horizon_chat_sessions')!); expect(sessions).toHaveLength(1); expect(sessions[0].messages).toHaveLength(4);
   });
@@ -63,5 +63,48 @@ describe('Floating answers and follow-up conversation', () => {
     render(<FloatingBarWindow isDarkMode />); send('First question'); await waitFor(() => expect(screen.getByText('First answer')).toBeDefined());
     fireEvent.click(screen.getByRole('button', { name: 'New floating conversation' })); expect(screen.queryByText('First answer')).toBeNull();
     expect(JSON.parse(localStorage.getItem('horizon_chat_sessions')!)).toHaveLength(1);
+  });
+  it('retains the original selected image for a different follow-up question', async () => {
+    window.horizonAPI = { captureDesktop: vi.fn().mockResolvedValue({ dataUrl: 'data:image/png;base64,original', displayLabel: 'Desktop' }) } as any;
+    mock.dispatch.mockResolvedValue(answer('First answer'));
+    render(<FloatingBarWindow isDarkMode />);
+    fireEvent.click(screen.getByRole('button', { name: 'Full Screen' }));
+    await waitFor(() => expect(screen.getByAltText('Crop preview')).toBeDefined());
+    send('Read the title'); await waitFor(() => expect(screen.getByText('First answer')).toBeDefined());
+    send('What is in the bottom corner?');
+    await waitFor(() => expect(mock.dispatch).toHaveBeenCalledTimes(2));
+    expect(mock.dispatch.mock.calls[1][1]).toEqual(['data:image/png;base64,original']);
+    expect(mock.dispatch.mock.calls[1][3][0].type).toBe('fullscreen');
+  });
+  it('hotkey starts a fresh chat after an answer while keeping the earlier chat in history', async () => {
+    let summon = () => {};
+    window.horizonAPI = { onFloatingNewChat: (callback: () => void) => { summon = callback; return () => {}; }, setFloatingState: vi.fn() } as any;
+    mock.dispatch.mockResolvedValue(answer('Old answer'));
+    render(<FloatingBarWindow isDarkMode />); send('Old question');
+    await waitFor(() => expect(screen.getByText('Old answer')).toBeDefined());
+    const oldId = localStorage.getItem('horizon_active_session_id');
+    act(() => summon()); expect(screen.queryByText('Old answer')).toBeNull();
+    send('New question'); await waitFor(() => expect(mock.dispatch).toHaveBeenCalledTimes(2));
+    expect(mock.dispatch.mock.calls[1][2]).toEqual([]);
+    expect(localStorage.getItem('horizon_active_session_id')).not.toBe(oldId);
+    expect(JSON.parse(localStorage.getItem('horizon_chat_sessions')!)).toHaveLength(2);
+  });
+  it('does not discard an unfinished request when a summon event arrives', async () => {
+    let summon = () => {}, resolve!: (value: any) => void;
+    window.horizonAPI = { onFloatingNewChat: (callback: () => void) => { summon = callback; return () => {}; } } as any;
+    mock.dispatch.mockReturnValue(new Promise(done => { resolve = done; }));
+    render(<FloatingBarWindow isDarkMode />); send('Pending question');
+    act(() => summon()); expect(screen.getByText('Pending question')).toBeDefined();
+    await act(async () => resolve(answer('Complete'))); expect(screen.getByText('Complete')).toBeDefined();
+  });
+  it('adds a scanned document through the picker and displays scan failures', async () => {
+    window.horizonAPI = { chooseAttachments: vi.fn().mockResolvedValueOnce([{ id: 'doc', documentId: 'doc', label: 'notes.pdf', type: 'pdf', safety: 'Defender scan completed' }]).mockRejectedValueOnce(new Error('Attachment blocked: scanner unavailable')) } as any;
+    mock.dispatch.mockResolvedValue(answer('Document answer'));
+    render(<FloatingBarWindow isDarkMode />); fireEvent.click(screen.getByRole('button', { name: 'Attach file' }));
+    await waitFor(() => expect(screen.getByText('notes.pdf')).toBeDefined());
+    send('Summarize'); await waitFor(() => expect(screen.getByText('Document answer')).toBeDefined());
+    expect(mock.dispatch.mock.calls[0][3][0].documentId).toBe('doc');
+    fireEvent.click(screen.getByRole('button', { name: 'Attach file' }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('scanner unavailable'));
   });
 });

@@ -50,7 +50,7 @@ async function launch() {
   await new Promise((resolve, reject) => { socket.addEventListener('open', resolve, { once: true }); socket.addEventListener('error', reject, { once: true }); });
   socket.addEventListener('message', event => { const response = JSON.parse(event.data), item = pending.get(response.id); if (item) { clearTimeout(item.timer); pending.delete(response.id); response.error ? item.reject(new Error(response.error.message)) : item.resolve(response.result); } });
   await until(() => renderer('Boolean(window.horizonAPI && document.querySelector(".horizon-app"))'));
-  await evaluate(`(()=>{global.__testModelRequests=[];const request=global.fetch;global.fetch=async(...args)=>{const url=String(args[0]);if(!url.includes('generativelanguage.googleapis.com'))return request(...args);const item={model:new URL(url).pathname.split('/').at(-1)};global.__testModelRequests.push(item);try{const response=await request(...args);item.status=response.status;const data=await response.clone().json().catch(()=>({}));item.providerCode=data.error?.code;item.providerStatus=data.error?.status;item.finishReason=data.candidates?.[0]?.finishReason;item.parts=data.candidates?.[0]?.content?.parts?.map(part=>({thought:part.thought,textLength:part.text?.length,keys:(()=>{try{return Object.keys(JSON.parse(part.text))}catch{return undefined}})()}));return response;}catch(error){item.failure=error.name;item.code=error.cause?.code;throw error;}};return true;})()`);
+  await evaluate(`(()=>{global.__testModelRequests=[];const request=global.fetch;global.fetch=async(...args)=>{const url=String(args[0]);if(!url.includes('generativelanguage.googleapis.com'))return request(...args);const item={model:new URL(url).pathname.split('/').at(-1)};global.__testModelRequests.push(item);try{const response=await request(...args);item.status=response.status;if(response.headers.get('content-type')?.includes('text/event-stream'))return response;const data=await response.clone().json().catch(()=>({}));item.providerCode=data.error?.code;item.providerStatus=data.error?.status;item.finishReason=data.candidates?.[0]?.finishReason;return response;}catch(error){item.failure=error.name;item.code=error.cause?.code;throw error;}};return true;})()`);
 }
 async function stopApp() {
   if (socket) { await evaluate(`setTimeout(()=>process.mainModule.require('electron').app.quit(),50);true` ).catch(() => {}); socket.close(); socket = null; }
@@ -61,7 +61,7 @@ async function send(prompt) {
   await renderer(`(()=>{const input=document.querySelector('textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,${JSON.stringify(prompt)});input.dispatchEvent(new Event('input',{bubbles:true}));})()`, true);
   await sleep(100);
   await renderer(`document.querySelector('[aria-label="Generate"]').click()`, true);
-  return until(() => renderer(`(()=>{if(document.querySelector('.floating-thinking'))return null;return [...document.querySelectorAll('.floating-message.assistant>div')].at(-1)?.textContent})()`, true), 60000);
+  return until(() => renderer(`(()=>{if(document.querySelector('.floating-thinking'))return null;return [...document.querySelectorAll('.floating-message.assistant>div')].at(-1)?.textContent})()`, true), 130000);
 }
 (async () => {
   try {
@@ -147,7 +147,18 @@ async function send(prompt) {
     const imageLatency = Math.round(performance.now() - imageStart);
     const liveImageAnswer = /github|repository/i.test(imageAnswer) && !(await renderer(`Boolean(document.querySelector('.message-error'))`, true));
     report.liveProvider.imageAnswer = liveImageAnswer;
-    check(liveImageAnswer ? 'Packaged image question returns a real answer within seven seconds' : 'Packaged image question reports a timed-out or unavailable provider within seven seconds', imageLatency <= 7000 && (liveImageAnswer || /Gemini (?:is temporarily busy|took longer than 7 seconds)|Could not connect to Gemini/.test(imageAnswer)), { elapsedMs: imageLatency, answer: imageAnswer });
+    check(liveImageAnswer ? 'Packaged image question returns a real streamed answer' : 'Packaged image question reports a timed-out or unavailable provider', liveImageAnswer || /Gemini|connection|request limit/i.test(imageAnswer), { elapsedMs: imageLatency, answer: imageAnswer });
+    check('Packaged attachment answer exposes local timing details', await renderer('Boolean(document.querySelector(".timing-details"))', true));
+    await renderer('window.horizonAPI.toggleFloatingBar()', true);
+    await until(() => renderer('!document.querySelector(".floating-message")&&!document.querySelector("img[alt=\\"Crop preview\\"]")', true));
+    check('Summon after a completed answer resets the packaged bar and preserves history', await renderer('JSON.parse(localStorage.getItem("horizon_chat_sessions")).some(session=>session.messages.length>0)', true));
+    const harmless = path.join(profile, 'harmless-plan.txt'); fs.writeFileSync(harmless, 'Launch date October 20. Budget 420 dollars.');
+    await evaluate(`process.mainModule.require('electron').dialog.showOpenDialog=async()=>({canceled:false,filePaths:[${JSON.stringify(harmless)}]});true`);
+    await renderer('document.querySelector("[aria-label=\\"Attach file\\"]").click()', true);
+    await until(() => renderer('document.body.textContent.includes("harmless-plan.txt")', true));
+    check('Packaged file picker accepts a document only after real Defender scanning', await renderer('Boolean(document.querySelector("[title*=\\"Defender scan completed\\"]"))', true));
+    await renderer(`document.querySelector('[aria-label="Full Screen"]').click()`, true);
+    await until(() => renderer(`Boolean(document.querySelector('img[alt="Crop preview"]'))`, true));
     const overlay = expression => evaluate(`process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>/#capture$/.test(w.webContents.getURL())).webContents.executeJavaScript(${JSON.stringify(expression)})`);
     await renderer('window.__testCaptureCount=0;window.horizonAPI.onAreaAttached(()=>window.__testCaptureCount++);true');
     await renderer('window.horizonAPI.triggerCapture()', true);
@@ -157,8 +168,9 @@ async function send(prompt) {
     for (const [x,y] of [[600,160],[600,450],[120,450],[120,160]]) await overlay(`document.querySelector('.capture-canvas').dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:${x},clientY:${y}}))`);
     await overlay(`document.querySelector('.capture-canvas').dispatchEvent(new MouseEvent('mouseup',{bubbles:true,button:0}))`);
     await until(() => overlay(`!document.querySelector('.capture-primary').disabled`));
+    const previousPreviews = await renderer(`document.querySelectorAll('img[alt="Crop preview"]').length`, true);
     await overlay(`document.querySelector('.capture-primary').click()`);
-    await until(() => renderer(`Boolean(document.querySelector('img[alt="Crop preview"]'))`, true));
+    await until(() => renderer(`document.querySelectorAll('img[alt="Crop preview"]').length===${previousPreviews + 1}`, true));
     check('Circle selection returns to the floating bar while workspace is open', await evaluate(`process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>/#bar$/.test(w.webContents.getURL())).isVisible()`) && (await renderer('window.__testCaptureCount')) === 0);
     await renderer('window.horizonAPI.triggerCapture()', true);
     await until(() => overlay(`!document.querySelector('.capture-selection path')&&document.querySelector('.capture-primary').disabled`));

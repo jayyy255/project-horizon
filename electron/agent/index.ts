@@ -87,13 +87,13 @@ export class AgentHost {
     // commands do not consume the separate Gemini model request budget.
     let lastSubmission = 0;
     // 1. Execute task
-    ipcMain.handle('horizon:execute-task', async (_event, payload: { prompt: string; sessionId?: string; images?: string[]; history?: Array<{role: 'user' | 'assistant'; text: string}> }) => {
+    ipcMain.handle('horizon:execute-task', async (_event, payload: { prompt: string; sessionId?: string; images?: string[]; history?: Array<{role: 'user' | 'assistant'; text: string}>; attachments?: import('../../shared/types').ContextAttachment[] }) => {
       const sessionId = payload.sessionId || `sess-${Date.now()}`;
       if (Date.now() - lastSubmission < 1500) throw new Error('Please wait a moment before sending another request.');
       lastSubmission = Date.now();
       try {
-        console.log(`[AgentHost] Executing task: "${payload.prompt}" (Session: ${sessionId}, Images: ${payload.images?.length || 0})`);
-        return await this.coordinator.executeTask(sessionId, payload.prompt, undefined, payload.images, payload.history);
+        console.log(`[AgentHost] Executing task (Session: ${sessionId}, Images: ${payload.images?.length || 0})`);
+        return await this.coordinator.executeTask(sessionId, payload.prompt, undefined, payload.images, payload.history, payload.attachments);
       } catch (err: any) {
         console.error('[AgentHost] Execute task error:', err);
         throw err;

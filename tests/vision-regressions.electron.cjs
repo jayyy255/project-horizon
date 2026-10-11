@@ -24,12 +24,12 @@ app.whenReady().then(async () => {
       return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ thought: true, text: 'hidden' }, { text: 'A GitHub repository page.' }] } }] }));
     });
     assert.equal(result.finalAnswer, 'A GitHub repository page.');
-    assert.equal(body.contents[0].parts[0].inlineData.mimeType, 'image/jpeg');
+    assert.equal(body.contents[0].parts[0].inlineData.mimeType, 'image/png');
     assert.match(body.contents[0].parts.at(-1).text, /A repo page/);
     assert.equal(body.generationConfig.responseMimeType, undefined);
     assert.ok(body.generationConfig.maxOutputTokens <= 768);
   });
-  for (const [status, message] of [[429, /quota or rate limit/], [403, /refused/], [404, /model.*unavailable/], [503, /HTTP 503/]]) await test('HTTP ' + status + ' returns an actionable error without exposing provider data', async () => {
+  for (const [status, message] of [[429, /quota or rate limit/], [403, /refused/], [404, /HTTP 404/], [503, /HTTP 503/]]) await test('HTTP ' + status + ' returns an actionable error without exposing provider data', async () => {
     const result = await answerImageQuestion('what is this?', [image], [], limiter(), async () => new Response('PRIVATE PROVIDER DATA', { status }));
     assert.match(result.error, message); assert.doesNotMatch(result.error, /PRIVATE/);
   });
@@ -37,26 +37,37 @@ app.whenReady().then(async () => {
     const result = await answerImageQuestion('what is this?', [image], [], limiter(), async () => new Response(JSON.stringify({ promptFeedback: { blockReason: 'SAFETY' } })));
     assert.match(result.error, /declined/); assert.equal(result.finalAnswer, undefined);
   });
-  await test('A temporary Gemini failure retries one fast cloud model inside the shared deadline', async () => {
+  await test('A temporary Gemini failure retries one fast cloud model with a fresh connection guard', async () => {
     const calls = [];
     const result = await answerImageQuestion('what is this?', [image], [], limiter(), async (url, options) => {
       calls.push({ url: String(url), signal: options.signal });
       return calls.length === 1 ? new Response('', { status: 503 }) : new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'A repository page.' }] } }] }));
     });
     assert.equal(result.finalAnswer, 'A repository page.'); assert.equal(calls.length, 2);
-    assert.match(calls[1].url, /gemini-3.5-flash-lite:generateContent/); assert.equal(calls[0].signal, calls[1].signal);
+    assert.match(calls[1].url, /gemini-3.5-flash-lite:streamGenerateContent/); assert.notEqual(calls[0].signal, calls[1].signal);
   });
   await test('Local limits prevent an outbound image request', async () => {
     const limited = new RequestLimiter(path.join(app.getPath('userData'), 'limited.json'), 1, 100); limited.take(); let called = false;
     const result = await answerImageQuestion('what is this?', [image], [], limited, async () => { called = true; });
     assert.equal(called, false); assert.match(result.error, /limit/);
   });
-  await test('Slow provider aborts within seven seconds without slow OCR or Ollama retries', async () => {
-    const start = performance.now(); let calls = 0;
+  await test('Successful answer after the previous seven-second deadline is retained', async () => {
+    assert.ok(VISION_DEADLINE_MS >= 60000);
     const result = await answerImageQuestion('what is this?', [image], [], limiter(), async (_url, options) => {
-      calls++; return new Promise((_, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true }));
+      await new Promise(resolve => setTimeout(resolve, 7100)); assert.equal(options.signal.aborted, false);
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'Late but complete answer.' }] } }] }));
     });
-    const elapsed = performance.now() - start; assert.equal(calls, 1); assert.match(result.error, /7 seconds/); assert.ok(elapsed >= VISION_DEADLINE_MS - 100 && elapsed < 7000, String(elapsed));
+    assert.equal(result.finalAnswer, 'Late but complete answer.');
+  });
+  await test('Streaming handles split events and shows partial answers before completion', async () => {
+    const partials = [];
+    const encode = text => new TextEncoder().encode(text);
+    const result = await answerImageQuestion('Explain', [image], [], limiter(), async () => new Response(new ReadableStream({ start(controller) {
+      controller.enqueue(encode('data: {"candidates":[{"content":{"parts":[{"text":"First "}]}}]}\n'));
+      controller.enqueue(encode('\ndata: {"candidates":[{"content":{"parts":[{"text":"second."}]}}]}\n\n'));
+      controller.close();
+    } }), { headers: { 'content-type': 'text/event-stream' } }), { onPartial: text => partials.push(text) });
+    assert.equal(result.finalAnswer, 'First second.'); assert.deepEqual(partials, ['First ', 'First second.']);
   });
   await test('Coordinator answers images without waiting for perception or parsing planner JSON', async () => {
     const { AgentCoordinator } = require('../dist-electron/electron/agent/coordinator');
@@ -85,8 +96,8 @@ app.whenReady().then(async () => {
     finally { global.fetch = original; coordinator.getSystemGraph().close(); coordinator.getCommandCache().close(); audit.close(); indexer.close(); }
   });
   if (oldKey) process.env.GEMINI_API_KEY = oldKey; else delete process.env.GEMINI_API_KEY;
-  fs.mkdirSync('docs/verification/vision-1.1.3', { recursive: true });
-  fs.writeFileSync('docs/verification/vision-1.1.3/regressions.json', JSON.stringify(reports, null, 2));
+  fs.mkdirSync('docs/verification/context-2026-10-11', { recursive: true });
+  fs.writeFileSync('docs/verification/context-2026-10-11/vision-regressions.json', JSON.stringify(reports, null, 2));
   console.log(JSON.stringify({ passed: reports.filter(item => item.passed).length, total: reports.length }));
   app.exit(reports.some(item => !item.passed) ? 1 : 0);
 });

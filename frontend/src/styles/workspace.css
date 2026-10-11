@@ -169,3 +169,10 @@ html { font-family:var(--font-ui); font-variant-ligatures:none; }
 .capture-toolbar button:hover { background:var(--surface-hover); }
 .capture-toolbar button:disabled { opacity:.35; cursor:default; }
 .capture-toolbar .capture-primary { background:#bed8ed; color:#1b2c3d; border-color:transparent; }
+.timing-details { margin-top: 12px; color: var(--text-muted, #9299a3); font-size: 11px; line-height: 1.5; }
+.timing-details summary { cursor: pointer; color: inherit; }
+.timing-details p { max-width: 560px; margin: 8px 0; }
+.timing-details dl { margin: 8px 0; }
+.timing-details dl > div { display: flex; justify-content: space-between; gap: 20px; padding: 3px 0; }
+.timing-details dd { white-space: nowrap; }
+.timing-details button { color: #438bc4; padding: 4px 0; }

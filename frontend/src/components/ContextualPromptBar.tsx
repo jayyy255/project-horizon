@@ -1,14 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowUp, Crop, Monitor, X, Plus, Loader2 } from 'lucide-react';
+import { ArrowUp, Crop, Monitor, X, Plus, Loader2, FileText } from 'lucide-react';
+import type { ContextAttachment } from '@shared/types';
 
-export interface ScreenAttachment {
-  id: string;
-  label: string;
-  type: 'crop' | 'fullscreen';
-  coords?: { x: number; y: number; w: number; h: number };
-  croppedDataUrl?: string;
-  timestamp?: number;
-}
+export type ScreenAttachment = ContextAttachment;
 
 interface ContextualPromptBarProps {
   isDarkMode: boolean;
@@ -19,6 +13,7 @@ interface ContextualPromptBarProps {
   onClearAttachments?: () => void;
   onTriggerLasso?: () => void;
   onTriggerFullScreen?: () => void;
+  onAttachFile?: () => void;
   showContextChoices?: boolean;
   initialPrompt?: string;
   onDraftChange?: (draft: string) => void;
@@ -33,6 +28,7 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
   onClearAttachments,
   onTriggerLasso,
   onTriggerFullScreen,
+  onAttachFile,
   showContextChoices = false,
   initialPrompt = '',
   onDraftChange
@@ -58,7 +54,7 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
   const handleExecute = (txt?: string) => {
     const val = txt || promptText;
     if (isBusy || (!val.trim() && attachments.length === 0)) return;
-    const finalTxt = val.trim() || (attachments.length > 0 ? "Analyze attached screen area" : "");
+    const finalTxt = val.trim() || (attachments.length > 0 ? "Analyze attached context" : "");
     if (onSubmitPrompt) {
       onSubmitPrompt(finalTxt, attachments);
     }
@@ -80,6 +76,7 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
           {attachments.map((att) => (
             <div 
               key={att.id}
+              title={att.safety || 'Kept for follow-up questions in this chat'}
               className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#8CC1E9]/15 border border-[#8CC1E9]/50 text-xs font-mono text-[#0055A0] dark:text-[#8CC1E9] shadow-sm backdrop-blur-md transition-all hover:bg-[#8CC1E9]/25"
             >
               {att.croppedDataUrl ? (
@@ -90,7 +87,7 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
                 />
               ) : att.type === 'crop' ? (
                 <Crop size={13} className="text-[#438BC4]" />
-              ) : (
+              ) : att.type === 'pdf' || att.type === 'file' ? <FileText size={13} /> : (
                 <Monitor size={13} className="text-[#438BC4]" />
               )}
               <span className="font-medium">
@@ -146,7 +143,7 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
             }}
             placeholder={
               attachments.length > 0 
-                ? `Ask Gemini about ${attachments.length === 1 ? 'this screen attachment' : `${attachments.length} attachments`}...` 
+                ? `Ask Gemini about ${attachments.length === 1 ? 'this attachment' : `${attachments.length} attachments`}...`
                 : "Ask Gemini to inspect, refactor, or automate..."
             }
             className="prompt-input"
@@ -156,6 +153,7 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
           {showContextChoices ? <div className="context-choices" aria-label="Optional screen context">
             <button type="button" disabled={isBusy} onClick={onTriggerLasso} aria-label="Circle Area"><Crop size={14} />Circle area</button>
             <button type="button" disabled={isBusy} onClick={onTriggerFullScreen} aria-label="Full Screen"><Monitor size={14} />Full screen</button>
+            {onAttachFile && <button type="button" disabled={isBusy} onClick={onAttachFile} aria-label="Attach file"><FileText size={14} />File</button>}
           </div> : <div className="relative" ref={captureMenuRef}>
             <button
               onClick={() => setShowCaptureMenu(prev => !prev)}
@@ -167,6 +165,7 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
               title="Add files or context"
               aria-label="Add screen context"
               aria-expanded={showCaptureMenu}
+              disabled={isBusy}
             >
               <Plus size={14} />
               <span>Add screen context</span>
@@ -210,6 +209,7 @@ export const ContextualPromptBar: React.FC<ContextualPromptBarProps> = ({
                     </div>
                   </button>
                 )}
+                {onAttachFile && <button disabled={isBusy} onClick={() => { setShowCaptureMenu(false); onAttachFile(); }} className="w-full text-left px-2.5 py-2 rounded-xl text-xs flex items-center gap-2 hover:bg-[#8CC1E9]/20"><FileText size={14} />Attach PDF or file</button>}
               </div>
             )}
           </div>

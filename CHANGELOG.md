@@ -1,5 +1,17 @@
 # Changes
 
+## 1.1.4
+
+- A hotkey press after a completed floating reply opens a fresh chat and preserves the previous conversation in history. In-progress requests and approval dialogs retain their state.
+- Selected images stay attached for follow-up questions. Their original pixels remain local; uploads are prepared afresh, with lossless small crops and a 2400-pixel maximum edge for larger images. Pixels outside a selected crop are never implicitly shared.
+- Image and document answers stream into the floating assistant. The 6.5-second cutoff is removed; a 60-second connection guard handles stalled requests. Cloud response times still vary.
+- Attach PDFs, UTF-8 text/code files, PNG, JPEG and WebP through the file picker. A fixed copy must pass Microsoft Defender before parsing; unavailable scanning blocks attachment use. Files are limited to 20 MB, PDFs to 100 pages, and extracted text to one million characters. Executables, archives, Office documents/macros, binary text and PDFs containing active content are rejected.
+- Explicit prompt-injection patterns are screened. Attachment content is treated as untrusted data, and file/PDF questions cannot invoke desktop tools. These defenses do not guarantee that every unknown malware or injection technique is detected.
+- Each attachment answer has expandable timing details: capture/crop, scanning, parsing, preparation, response headers, first text, stream completion and rendering. Local rotating JSONL logs omit prompts, file paths, contents and credentials. Context selection for large text documents is repeated for each follow-up.
+- Visual and scanned PDFs use locally rendered images of up to three relevant pages per question. Page images are bounded to a 1600-pixel edge, and a later question can select another page from the inspected original. Ordinary text PDF questions use extracted text.
+
+Validation: 47 frontend, 33 desktop command, 20 shortcut/rate-limit, 14 image and 13 attachment-security checks passed, including a real Defender scan of harmless content, bounded PDF page rendering, streamed replies, the removed short deadline and blocked PDF active content. Native app verification covers fresh hotkey chats, retained context, scanned PDFs, both themes and live generated attachment questions. Recorded timings are samples, not guarantees.
+
 ## 1.1.3
 
 - Enable shortcut recovers from an unavailable binding by registering and saving an available alternative. Preferences shows the actual shortcut in a selector, reports recovery, and preserves an existing working choice on upgrade. New setups default to Ctrl + Alt + H.

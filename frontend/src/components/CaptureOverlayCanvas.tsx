@@ -9,6 +9,7 @@ interface CaptureAreaPayload {
   label: string;
   coords?: { x: number; y: number; w: number; h: number };
   croppedDataUrl?: string;
+  cropDurationMs?: number;
 }
 
 interface CaptureOverlayCanvasProps {
@@ -241,12 +242,14 @@ export const CaptureOverlayCanvas: React.FC<CaptureOverlayCanvasProps> = ({
     if (!onAttachArea) return;
 
     if (boundingBox && boundingBox.w > 0 && boundingBox.h > 0) {
+      const cropStarted = performance.now();
       const croppedDataUrl = await createCroppedImage(boundingBox);
       onAttachArea({
         type: 'crop',
         label: `Area [${boundingBox.w}×${boundingBox.h}px]`,
         coords: boundingBox,
         croppedDataUrl,
+        cropDurationMs: performance.now() - cropStarted,
       });
     } else {
       handleAttachFullScreen(e);

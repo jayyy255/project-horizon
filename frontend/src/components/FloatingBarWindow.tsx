@@ -4,6 +4,8 @@ import { HorizonMark } from './HorizonMark';
 import { ContextualPromptBar, ScreenAttachment } from './ContextualPromptBar';
 import { useHorizonAgent } from '../hooks/useHorizonAgent';
 import type { ReActSessionState } from '../services/agentClient';
+import { TimingDetails } from './TimingDetails';
+import type { LatencyReport } from '@shared/types';
 
 interface FloatingMessage {
   id: string;
@@ -12,6 +14,7 @@ interface FloatingMessage {
   timestamp: string;
   status?: 'working' | 'done' | 'error';
   attachments?: ScreenAttachment[];
+  latency?: LatencyReport;
 }
 const timestamp = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -29,6 +32,10 @@ export function FloatingBarWindow({ isDarkMode }: { isDarkMode: boolean }) {
   const pending = useRef(false);
   const { sessionState, dispatchTask, submitTier2Decision } = useHorizonAgent();
   const approval = sessionState?.status === 'awaiting_tier2' ? sessionState.pendingTier2 : undefined;
+  const reset = () => { if (pending.current || approval) return; conversation.current = null; setMessages([]); setAttachments([]); setDraft(''); setCaptureError(''); setComposerVersion(value => value + 1); };
+  const resetRef = useRef(reset); resetRef.current = reset;
+  useEffect(() => window.horizonAPI?.onFloatingNewChat?.(() => resetRef.current()), []);
+  useEffect(() => { void window.horizonAPI?.setFloatingState?.({ completed: messages.some(message => message.sender === 'assistant' && message.status !== 'working'), busy: busy || capturing || Boolean(approval) }); }, [messages, busy, capturing, approval]);
 
   useEffect(() => {
     const focus = () => panel.current?.querySelector('textarea')?.focus();
@@ -36,7 +43,7 @@ export function FloatingBarWindow({ isDarkMode }: { isDarkMode: boolean }) {
     const unsubscribe = window.horizonAPI?.onAreaAttached?.(data => {
       if (data) setAttachments(prev => [...prev, { id: crypto.randomUUID(), label: data.label || 'Screen selection',
         type: data.type === 'fullscreen' ? 'fullscreen' : 'crop', coords: data.coords,
-        croppedDataUrl: data.croppedDataUrl || data.dataUrl, timestamp: Date.now() }]);
+        croppedDataUrl: data.croppedDataUrl || data.dataUrl, traceId: data.traceId, timestamp: Date.now() }]);
     });
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
       if (panel.current) void window.horizonAPI?.resizeFloatingBar?.(Math.ceil(panel.current.getBoundingClientRect().height) + 16);
@@ -59,8 +66,12 @@ export function FloatingBarWindow({ isDarkMode }: { isDarkMode: boolean }) {
       localStorage.setItem('horizon_active_session_id', session.id);
     } catch (error) { console.warn('[FloatingBar] Could not save conversation:', error); }
   };
-  const reply = (state: ReActSessionState, current: FloatingMessage[]) => save(current.map((message, index) => index === current.length - 1
-    ? { ...message, text: state.currentNarration, status: state.status === 'error' ? 'error' : state.status === 'awaiting_tier2' ? 'working' : 'done' } : message));
+  const reply = (state: ReActSessionState, current: FloatingMessage[]) => {
+    const receivedAt = performance.now();
+    save(current.map((message, index) => index === current.length - 1
+      ? { ...message, text: state.currentNarration, latency: state.latency, status: state.status === 'error' ? 'error' : state.status === 'awaiting_tier2' ? 'working' : 'done' } : message));
+    if (state.latency) requestAnimationFrame(() => requestAnimationFrame(() => void window.horizonAPI?.recordRenderLatency?.(state.latency!.id, performance.now() - receivedAt)));
+  };
 
   const submit = async (prompt: string, context: ScreenAttachment[]) => {
     if (pending.current || approval || !prompt.trim()) return;
@@ -71,8 +82,8 @@ export function FloatingBarWindow({ isDarkMode }: { isDarkMode: boolean }) {
     const current: FloatingMessage[] = [...messages,
       { id: crypto.randomUUID(), sender: 'user', text: prompt, timestamp: timestamp(), attachments: context },
       { id: crypto.randomUUID(), sender: 'assistant', text: 'Thinking…', timestamp: timestamp(), status: 'working' }];
-    save(current); setAttachments([]);
-    try { reply(await dispatchTask(prompt, context.map(item => item.croppedDataUrl).filter((url): url is string => Boolean(url)), history), current); }
+    save(current);
+    try { reply(await dispatchTask(prompt, context.map(item => item.croppedDataUrl).filter((url): url is string => Boolean(url)), history, context), current); }
     catch (error) { reply({ currentNarration: error instanceof Error ? error.message : 'Could not get an answer.', status: 'error' } as ReActSessionState, current); }
     finally { pending.current = false; setBusy(false); }
   };
@@ -88,7 +99,7 @@ export function FloatingBarWindow({ isDarkMode }: { isDarkMode: boolean }) {
     try {
       const data = await window.horizonAPI?.captureDesktop();
       if (data?.dataUrl) setAttachments(prev => [...prev, { id: crypto.randomUUID(), label: data.displayLabel || 'Desktop',
-        type: 'fullscreen', croppedDataUrl: data.dataUrl, timestamp: Date.now() }]);
+        type: 'fullscreen', croppedDataUrl: data.dataUrl, traceId: data.traceId, timestamp: Date.now() }]);
     } catch { setCaptureError('Could not capture your screen. Try again.'); }
     finally { setCapturing(false); }
   };
@@ -98,24 +109,34 @@ export function FloatingBarWindow({ isDarkMode }: { isDarkMode: boolean }) {
     catch { setCaptureError('Could not start screen selection. Try again.'); }
     finally { setCapturing(false); }
   };
+  const attachFile = async () => {
+    setCaptureError(''); setCapturing(true);
+    try { const items = await window.horizonAPI?.chooseAttachments?.(); if (items) setAttachments(prev => [...prev, ...items]); }
+    catch (error) { setCaptureError(error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+': Error: /, '') : 'Could not inspect the file.'); }
+    finally { setCapturing(false); }
+  };
 
   return <div className={`floating-bar ${isDarkMode ? '' : 'light-mode'} w-full h-full p-2 flex flex-col justify-end bg-transparent`}>
     <div ref={panel} className="floating-panel w-full backdrop-blur-2xl">
       <header className="floating-header"><div className="flex items-center gap-2"><HorizonMark size={23} /><span>Horizon</span>{busy && <span className="floating-thinking">Thinking…</span>}</div><div className="flex items-center gap-1">
-        <button disabled={busy || Boolean(approval)} onClick={() => { conversation.current = null; setMessages([]); setAttachments([]); setDraft(''); setComposerVersion(value => value + 1); }} aria-label="New floating conversation" title="New question"><Plus size={15} /></button>
+        <button disabled={busy || capturing || Boolean(approval)} onClick={reset} aria-label="New floating conversation" title="New question"><Plus size={15} /></button>
         <button disabled={busy || Boolean(approval) || capturing} onClick={() => void window.horizonAPI?.openMainWindow?.({ newChat: true, draft, attachments })} aria-label="Open workspace" title="Open a new chat in workspace"><Maximize2 size={14} /></button>
         <button onClick={() => void window.horizonAPI?.hideFloatingBar?.()} aria-label="Dismiss floating assistant" title="Dismiss (Esc)"><X size={15} /></button>
       </div></header>
       {messages.length > 0 && <section ref={feed} className="floating-feed" aria-label="Floating conversation" aria-live="polite">
         {messages.map(message => <article key={message.id} className={`floating-message ${message.sender}`}><span className="floating-speaker">{message.sender === 'user' ? 'You' : 'Horizon'}</span>
           <div className={message.status === 'error' ? 'message-error' : ''}>{message.status === 'working' && busy ? (sessionState?.currentNarration || 'Thinking…') : message.text}</div>
+          {message.sender === 'assistant' && <TimingDetails report={message.latency} />}
         </article>)}
         {approval && <div className="floating-approval"><strong className="flex items-center gap-2"><ShieldCheck size={15} />Your approval is needed</strong><p>{approval.description}</p><code>{approval.command || [approval.executablePath, ...(approval.args || [])].filter(Boolean).join(' ')}</code><div className="flex justify-end gap-3 mt-3"><button disabled={busy} onClick={() => void decide(false)}>Deny</button><button disabled={busy} onClick={() => void decide(true)}>Allow once</button></div></div>}
       </section>}
-      {messages.length === 0 && <p className="floating-context-hint">Ask anything, or add screen context below.</p>}
+      {messages.length === 0 && <p className="floating-context-hint">Ask anything, or add a screen selection or file.</p>}
+      {attachments.length > 0 && <p className="floating-context-hint">Context stays for follow-ups.{attachments.some(item => item.type === 'crop') ? ' A crop includes only the selected area.' : ''}</p>}
+      {capturing && <p className="floating-context-hint" role="status">Preparing context… Files are scanned before use.</p>}
       {captureError && <p role="alert" className="floating-context-error">{captureError}</p>}
       <ContextualPromptBar key={composerVersion} isDarkMode={isDarkMode} showContextChoices onDraftChange={setDraft} attachments={attachments} onRemoveAttachment={id => setAttachments(prev => prev.filter(item => item.id !== id))}
         onClearAttachments={() => setAttachments([])} onTriggerLasso={() => void circleScreen()} onTriggerFullScreen={() => void captureScreen()}
+        onAttachFile={() => void attachFile()}
         onSubmitPrompt={submit} isBusy={busy || capturing || Boolean(approval)} />
     </div>
   </div>;

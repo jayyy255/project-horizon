@@ -15,6 +15,9 @@ import { agentDataPath } from './sqlite';
 import { parseProjectOpen } from './workspaces';
 import { RequestLimiter } from './rateLimit';
 import { answerImageQuestion, imagePart, isImageQuestion } from './vision';
+import { ContextAttachment, LatencyReport } from '../../shared/types';
+import { resolveDocuments } from '../attachments';
+import { LatencyTrace } from '../latency';
 
 export interface ReActStep {
   stepIndex: number;
@@ -38,6 +41,7 @@ export interface ReActSessionState {
   currentTool?: string;
   steps: ReActStep[];
   pendingTier2?: Tier2ActionPayload;
+  latency?: LatencyReport;
 }
 
 export type StateChangeCallback = (state: ReActSessionState) => void;
@@ -132,7 +136,8 @@ export class AgentCoordinator {
     prompt: string,
     plannerOverrideOrImages?: ((state: ReActSessionState) => Promise<{ action?: ProposedAction; finalAnswer?: string }>) | string[],
     imagesOrPlannerOverride?: string[] | ((state: ReActSessionState) => Promise<{ action?: ProposedAction; finalAnswer?: string }>),
-    history?: Array<{ role: 'user' | 'assistant'; text: string }>
+    history?: Array<{ role: 'user' | 'assistant'; text: string }>,
+    attachments: ContextAttachment[] = []
   ): Promise<ReActSessionState> {
     if (this.activeSession && ['working', 'awaiting_tier2'].includes(this.activeSession.status)) {
       throw new Error('Finish or cancel the current task before starting another one.');
@@ -181,12 +186,27 @@ export class AgentCoordinator {
 
     this.notify();
 
-    if (!plannerOverride && process.env.MOCK_PLANNER !== 'true' && isImageQuestion(prompt, images)) {
-      this.activeSession.currentNarration = 'Reading your screen…';
+    const hasDocuments = attachments.some(item => item.type === 'pdf' || item.type === 'file');
+    const hasFileContext = hasDocuments || attachments.some(item => item.type === 'image');
+    if (hasFileContext || (!plannerOverride && process.env.MOCK_PLANNER !== 'true' && isImageQuestion(prompt, images))) {
+      const trace = new LatencyTrace([...new Set(attachments.map(item => item.type))].join('+') || 'image');
+      for (const item of attachments) {
+        const captured = item.traceId ? LatencyTrace.get(item.traceId)?.report() : undefined;
+        for (const stage of captured?.stages || []) trace.add(`attachment_${stage.name}`, stage.durationMs, stage.status);
+      }
+      this.activeSession.currentNarration = hasDocuments ? 'Reading your attachment…' : 'Reading your screen…';
       this.notify();
-      const result = await answerImageQuestion(prompt, images, history, this.requestLimiter);
+      let result: { finalAnswer?: string; error?: string };
+      try {
+        const documents = await trace.measure('attachment_context_loading', () => resolveDocuments(attachments));
+        result = await answerImageQuestion(prompt, images, history, this.requestLimiter, fetch, { documents, trace,
+          onPartial: text => { if (this.activeSession?.status === 'working') { this.activeSession.currentNarration = text; this.notify(); } } });
+      } catch (error) { result = { error: error instanceof Error ? error.message : 'Could not read the attachment. Reattach it.' }; }
+      // Attachments never grant permission to execute document instructions.
+      if (this.activeSession.status !== 'working') return this.activeSession;
       this.activeSession.status = result.finalAnswer ? 'done' : 'error';
       this.activeSession.currentNarration = result.finalAnswer || result.error || 'Could not answer this image question.';
+      this.activeSession.latency = trace.save();
       this.auditDb.updateSessionOutcome(sessionId, result.finalAnswer ? 'succeeded' : 'failed');
       this.notify();
       return this.activeSession;

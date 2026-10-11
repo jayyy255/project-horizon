@@ -1,4 +1,4 @@
-import { Tier2ActionPayload } from '@shared/types';
+import { Tier2ActionPayload, ContextAttachment, LatencyReport } from '@shared/types';
 
 export interface ReActStep {
   stepIndex: number;
@@ -20,6 +20,7 @@ export interface ReActSessionState {
   currentTool?: string;
   steps: ReActStep[];
   pendingTier2?: Tier2ActionPayload;
+  latency?: LatencyReport;
 }
 
 export interface AgentServiceConfig {
@@ -150,14 +151,14 @@ export class AgentClient {
     return res.json();
   }
 
-  public async executeTask(prompt: string, sessionId?: string, images?: string[], history?: Array<{role: 'user' | 'assistant'; text: string}>): Promise<ReActSessionState> {
+  public async executeTask(prompt: string, sessionId?: string, images?: string[], history?: Array<{role: 'user' | 'assistant'; text: string}>, attachments?: ContextAttachment[]): Promise<ReActSessionState> {
     if (this.isElectronMode() && window.horizonAPI?.executeTask) {
-      return await window.horizonAPI.executeTask({ prompt, sessionId, images, history });
+      return await window.horizonAPI.executeTask({ prompt, sessionId, images, history, attachments });
     }
     const res = await fetch(`${this.config.httpBaseUrl}/api/task/execute`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, sessionId, images, history }),
+      body: JSON.stringify({ prompt, sessionId, images, history, attachments }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
