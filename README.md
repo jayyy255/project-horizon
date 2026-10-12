@@ -4,21 +4,21 @@
 
 Horizon is a Windows desktop assistant for asking questions about your screen or documents, finding local projects, and opening them in VS Code. A global shortcut opens a small prompt over the app you are using. You can ask a text-only question, select part of the screen, attach the full display, or choose a PDF, image or text/code file. Answers stream into the floating assistant; the workspace keeps your chats and shows the execution trace for actions.
 
-The latest source version is **1.1.4** for Windows 10/11 (x64). The shared-access installers have been withdrawn. See the [changelog](CHANGELOG.md) for changes and validation.
+The latest source version is **1.1.5** for Windows 10/11 (x64), with hosted Google sign-in. Its live sign-in validation is pending; the previous shared-key installers have been withdrawn. See the [changelog](CHANGELOG.md) for changes and validation.
 
 ## Install
 
 **Installer withdrawal — 12 October 2026:** The friends installers for versions 1.1.1–1.1.4 and their checksum files have been removed from GitHub releases because they contained an owner-provided Gemini credential. That credential has been revoked. Existing copies no longer provide shared Gemini access; do not redistribute them. The repository is public. See the [withdrawal notice](https://github.com/jayyy255/project-horizon/releases/tag/v1.1.4).
 
-A replacement with server-side credentials has not been released. For personal use, build the standard installer with `npm run package:win` and configure your own Gemini key. Keep shared production credentials on a backend, outside desktop installers and source control.
+A replacement installer has not been published yet. The standard `npm run package:win` build uses Google sign-in and server-side credentials; it includes no Gemini key or OAuth client secret.
 
-The [hosted Gemini backend](backend/gemini-service/README.md) now has source-deployment files, Google-account verification and persistent server-side usage limits. It is locally tested but not deployed or connected to the current desktop app.
+The [hosted Gemini backend](backend/gemini-service/README.md) has Google-account verification and persistent usage limits. The owner deployed the initial service and confirmed its startup/configuration checks. The updated OAuth endpoints and secret binding must be deployed before the 1.1.5 desktop sign-in can be verified live.
 
 To upgrade, **Quit Horizon from the system tray**, then run the new installer. Your saved shortcut and chats remain in your Windows user profile. You do not need to uninstall the previous version.
 
 On first launch, review the consent screen and choose **Continue** to enable the global shortcut. New profiles start with **Ctrl + Alt + H**. Existing profiles keep their saved choice, including **Ctrl + Space**. If a shortcut is unavailable, Horizon tries another available choice and shows the active binding in **Preferences → Hotkey Trigger**. Keep Horizon running in the tray to use the shortcut outside its workspace. This release does not start automatically when you sign in to Windows; launch Horizon first.
 
-The standard installer, built with `npm run package:win`, does not include owner access. It requires a personal Gemini key entered under **Preferences → Inference Engine**.
+Open **Preferences → Inference Engine → Sign in with Google** and use an account approved by the app owner. Your browser handles sign-in; Horizon stores your session encrypted for this Windows account. **Sign out** removes the saved session on this device. Ordinary users do not configure Gemini keys or Google Cloud.
 
 ## Use the floating assistant
 
@@ -41,11 +41,11 @@ You can also ask Horizon to open an indexed project in VS Code, for example, “
 | Extracted document text | 1,000,000 characters |
 | Combined model upload | 19 MB |
 
-Image and document questions take a direct Gemini path. Small crops retain lossless text; larger image uploads use a 2400-pixel maximum edge and compact JPEG while the original stays local. There is no seven-second cutoff. A 60-second connection guard handles stalled requests, and transient provider errors can use a second fast model. Response time depends on Gemini, document size and connectivity.
+Questions stream through Horizon's hosted answer service to Gemini. Small crops retain lossless text; larger image uploads use a 2400-pixel maximum edge and compact JPEG while the original stays local. The owner controls model selection. There is no seven-second cutoff. A 60-second per-attempt connection guard handles stalled model requests, and transient provider errors can use a second fast model. Response time depends on hosting, Gemini, document size and connectivity.
 
 Expand **Timing** below an attachment answer for capture/crop, file validation, Defender scan, parsing, PDF page rendering, context preparation, response headers, first text, stream completion and answer rendering. **Show local timing logs** opens the folder containing `latency.jsonl`. Logs rotate at 5 MB and contain timing metadata only. Answer time excludes earlier attachment preparation and time spent choosing context; some stage timings overlap.
 
-Live checks on **11 October 2026** used generated images and documents:
+Historical **1.1.4 direct-Gemini** checks on **11 October 2026** used generated images and documents. These are not measurements of the new hosted service:
 
 | Context | Observed answer processing | Separate attachment preparation |
 | --- | ---: | --- |
@@ -60,15 +60,17 @@ The visual PDF sample includes 0.35 s of local page rendering; most of its time 
 ## Privacy and access
 
 - The shortcut alone does not capture the screen. You choose when to attach context. Action requests may also inspect the screen as part of the requested task. When Gemini handles an attachment question, the prompt, recent conversation and selected image/document context are sent to Google. Text PDFs normally send extracted text; scanned PDFs and visual questions send locally rendered images of up to three relevant pages. Ask for **page 5**, for example, to inspect another page. The original stays local for follow-ups. Screen element detection runs on the device.
-- Chats, project indexes, and audit records are stored on your computer. Standard-build Gemini keys are encrypted for the Windows account.
+- Chats, project indexes, and audit records are stored on your computer. Google session tokens are encrypted for the Windows account and are never exposed through renderer IPC. Prompts and chosen context pass through the Horizon backend to Gemini; provider credentials stay on the server.
 - Scanned document copies and extracted context are retained locally for follow-ups. Executables, archives, Office documents/macros, binary text and active PDF content are blocked. Defender must be enabled with current definitions; scan failures block use. Explicit injection patterns are screened, and file/PDF questions have no desktop tools. Antivirus and injection defenses reduce risk; they cannot certify that every unknown threat is absent.
-- The withdrawn friends installers contained an extractable owner-provided Gemini credential, which has been revoked. A copy of that revoked credential also remains in older Git history; removing current files does not remove historical copies. Local limits of 10 model calls per minute and 100 per rolling 24 hours reduce accidental use, but cannot enforce a secure per-user quota. Shared production access requires a hosted service with server-side credentials and usage limits.
+- The withdrawn friends installers contained an extractable owner-provided Gemini credential, which has been revoked. A copy of that revoked credential remains in older Git history. Credential bundling is now disabled. Hosted access checks signed Google identities against an allowlist and reserves persistent quotas: by default 10 model attempts/minute and 100/rolling 24 hours per account, with a shared ceiling of 20/minute and 200/rolling 24 hours. Fallback attempts count separately. These are usage limits, not a monetary cap.
 
 ## Troubleshooting
 
 | Symptom | What to do |
 | --- | --- |
 | Shortcut does nothing | Check **Preferences → Hotkey Trigger** for **Active across Windows**. Select another shortcut or choose **Enable shortcut**. Confirm Horizon is running in the tray. |
+| Sign-in reports that the service is private or unconfigured | The app owner must deploy the OAuth update, attach the OAuth secret and approve desktop access. A user's Gemini key is not required. |
+| Google account is not approved | Use an account on the owner's allowlist and, while OAuth is in testing, its Google test-user list. |
 | A follow-up opens an empty chat | After a completed answer, the shortcut intentionally starts a fresh chat. Type in the existing bar or reopen the earlier chat from history to continue. |
 | A question needs something outside the crop | Attach a new selection or the full screen. Horizon retains only the pixels you selected. |
 | A file is blocked | Check its type and size, and confirm Microsoft Defender is enabled with current definitions. Executables, archives, Office files and active PDFs are unsupported. Scanning failures also block attachments. |
@@ -101,9 +103,9 @@ npm run build:desktop
 npm run package:win
 ```
 
-The legacy friends build embeds an extractable credential and must not be used to distribute a replacement production key. Its release publisher refuses publication to a public repository. See the [packaging notes](packaging/README.md) for standard build details. Never commit a Gemini key or the generated installer to this repository.
+The legacy friends build now refuses to run. See the [packaging notes](packaging/README.md) for standard hosted-build details. Never commit a Gemini key, OAuth secret, account token or generated installer to this repository. For deliberate personal-key development only, `HORIZON_GEMINI_DIRECT=1` enables the existing local key configuration.
 
-For native UI checks with live generated attachment questions, run `npm run test:desktop:context-ui`. This requires configured Gemini access and working Microsoft Defender, sends generated fixtures to Gemini, and consumes API quota.
+For native hosted UI checks, run `npm run test:desktop:context-ui`. It uses synthetic account sessions and generated attachments with mocked answers; external requests are blocked. Microsoft Defender is needed for local file scanning. These checks do not consume Gemini quota or measure cloud latency. `npm run test:desktop:account` checks the browser/loopback account flow using local fixtures, and `npm run test:hosted` checks backend authentication and quotas.
 
 The 1.1.4 validation passed **127 regression checks**, **11 native UI checks**, **13 packaged attachment/PDF checks**, and **35 checks against the packaged executable**. Coverage includes shortcut restoration and conflict recovery, fresh chats, retained context, streaming, file scanning and PDF page rendering. Threat detections and scanner failures are simulated; no malware is executed during testing.
 

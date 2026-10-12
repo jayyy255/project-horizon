@@ -7,7 +7,7 @@ const { listPackage } = require('@electron/asar');
 const repo = path.resolve(__dirname, '..');
 const root = path.join(repo, 'release/win-unpacked');
 const resources = path.join(root, 'resources');
-const profile = path.join(repo, 'scratch/package-smoke');
+const profile = path.join(repo, 'scratch/package-smoke-' + Date.now());
 const cwd = path.join(profile, 'cwd-outside-checkout');
 fs.mkdirSync(cwd, { recursive: true });
 const version = require('../package.json').version;
@@ -43,6 +43,7 @@ async function renderer(expression) {
   try {
     const files = listPackage(path.join(resources, 'app.asar')).map(file=>file.replace(/\\/g,'/'));
     check('No bundled .env files', !fs.existsSync(path.join(resources,'.env')) && !files.some(f=>/(^|[\\/])\.env(?:$|[.\\/])/.test(f)));
+    check('No owner Gemini or OAuth credential resources', !fs.existsSync(path.join(resources,'app-access/owner-gemini.json')) && !files.some(file=>/horizon-account\.enc|cloud-run\.env\.yaml|owner-gemini\.json/.test(file)));
     check('Brand icon and JetBrains font bundled', files.some(f=>f.endsWith('/assets/icon.png')) && files.some(f=>/jetbrains/i.test(f)));
     check('Native window verifier bundled', fs.existsSync(path.join(resources,'native/list_windows.exe')));
     const env = { ...process.env, APPDATA:path.join(profile,'appdata'), PYTHONHOME:'', PYTHONPATH:'', PATH:[path.join(process.env.WINDIR,'System32'),path.join(process.env.WINDIR,'System32/WindowsPowerShell/v1.0')].join(path.delimiter) };
@@ -70,8 +71,8 @@ async function renderer(expression) {
     await renderer(`document.querySelector('.consent-secondary').click();document.querySelector('[aria-label="Preferences"]').click();`);
     await until(()=>renderer(`Boolean([...document.querySelectorAll('button')].find(b=>b.textContent==='Inference Engine'))`));
     await renderer(`[...document.querySelectorAll('button')].find(b=>b.textContent==='Inference Engine').click()`);
-    await until(()=>renderer(`Boolean(document.querySelector('#gemini-api-key'))`));
-    check('Installer key setup is available', await renderer(`document.querySelector('#gemini-api-key').type==='password'`));
+    await until(()=>renderer(`document.body.textContent.includes('Sign in with Google')`));
+    check('Hosted installer offers Google sign-in without a key field', await renderer(`!document.querySelector('#gemini-api-key')`));
     fs.writeFileSync(path.join(profile,'preferences.png'), Buffer.from(await evaluate(`process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>/index.html$/.test(w.webContents.getURL())).webContents.capturePage().then(image=>image.toPNG().toString('base64'))`),'base64'));
     const prompt='open my code security reviewer project in vs code';
     // Keep the editor's normal profile while Horizon retains its cached,

@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+if ($env:HORIZON_BUNDLE_OWNER_KEY -eq '1') { throw 'Credential bundling has been retired. Use the hosted service and package:win.' }
 $repoPath = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $stagingPath = [System.IO.Path]::GetFullPath((Join-Path $repoPath 'release/staging'))
 if (-not $stagingPath.StartsWith($repoPath + [System.IO.Path]::DirectorySeparatorChar)) { throw 'Invalid staging path.' }
@@ -8,19 +9,6 @@ $runtimePath = Join-Path $servicePath 'runtime'
 $nativePath = Join-Path $stagingPath 'native'
 $accessPath = Join-Path $stagingPath 'app-access'
 New-Item -ItemType Directory -Path $runtimePath,$nativePath,$accessPath -Force | Out-Null
-if ($env:HORIZON_BUNDLE_OWNER_KEY -eq '1') {
-  $sharedGeminiKey = $env:GEMINI_API_KEY
-  if ($sharedGeminiKey -notmatch '^(?:AIza[\w-]{20,}|AQ\.[\w.-]{20,})$') {
-    $keyLine = Get-Content -LiteralPath (Join-Path $repoPath '.env') | Where-Object { $_ -match '^\s*GEMINI_API_KEY\s*=' } | Select-Object -Last 1
-    if ($keyLine) { $sharedGeminiKey = ($keyLine -split '=',2)[1].Trim().Trim('"').Trim("'") }
-  }
-  if ($sharedGeminiKey -notmatch '^(?:AIza[\w-]{20,}|AQ\.[\w.-]{20,})$') { throw 'A valid owner Gemini key is required for a friends build.' }
-  $accessJson = @{apiKey=$sharedGeminiKey} | ConvertTo-Json -Compress
-  [IO.File]::WriteAllText((Join-Path $accessPath 'owner-gemini.json'), $accessJson, [Text.UTF8Encoding]::new($false))
-  $sharedGeminiKey = $null
-  $accessJson = $null
-  Write-Host 'Owner-provided Gemini access prepared for the private friends build.'
-}
 $cachePath = Join-Path $repoPath 'release/downloads'
 New-Item -ItemType Directory -Path $cachePath -Force | Out-Null
 $pythonZip = Join-Path $cachePath 'python-3.13.2-embed-amd64.zip'

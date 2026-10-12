@@ -1,6 +1,6 @@
 {
   "name": "project-horizon",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "System-Wide Multimodal Desktop & GUI Agent for Windows",
   "main": "dist-electron/electron/main.js",
   "scripts": {
@@ -17,6 +17,7 @@
     "test:frontend": "npm run test --prefix frontend",
     "test:agent": "npm run test --prefix backend/agent-service",
     "test:hosted": "npm run test --prefix backend/gemini-service",
+    "test:desktop:account": "npm run build:electron && node --test tests/cloud-account.cjs",
     "test:desktop:commands": "npm run build:electron && electron tests/command-regressions.electron.cjs",
     "test:desktop:hotkeys": "npm run build:electron && node --test tests/hotkeys.cjs tests/rate-limit.cjs",
     "test:desktop:vision": "npm run build:electron && electron tests/vision-regressions.electron.cjs",

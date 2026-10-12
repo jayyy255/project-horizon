@@ -2,7 +2,7 @@
 
 This service is prepared for Cloud Run. It reads the Gemini credential from a Secret Manager binding, verifies Google ID tokens, permits only configured accounts, and streams text/image/document answers. No Gemini key is included in this directory, the source upload, or the desktop installer.
 
-**Status:** locally tested; not deployed. The existing Horizon desktop app still calls Gemini directly. Google sign-in and routing the desktop app to this service remain to be implemented after the deployment URL is available. This service answers questions; it does not provide the desktop action planner or execute tools.
+**Status:** the owner deployed the initial service and confirmed `/health` and `/ready`. The 1.1.5 desktop source now uses this service for questions and has Google sign-in. The updated OAuth endpoints and second secret binding still need deployment, followed by a real signed-in answer test. Local fixture tests do not establish live Gemini availability. This service answers questions; it does not provide the desktop action planner or execute tools.
 
 ## Project configuration
 
@@ -12,6 +12,8 @@ This service is prepared for Cloud Run. It reads the Gemini credential from a Se
 | Runtime service account | `horizon-backend@project-c7d759e1-7d06-4978-bc0.iam.gserviceaccount.com` |
 | Secret | `gemini-horizon-key` |
 | Secret environment variable | `GEMINI_API_KEY` |
+| Desktop OAuth secret | `horizon-oauth-client-secret`, bound as `GOOGLE_OAUTH_CLIENT_SECRET` |
+| Service URL | `https://horizon-backend-h7zgdbwiha-el.a.run.app` |
 | Default secret version | `1`; select the actual enabled numbered version |
 | Default region | `asia-south1` (Mumbai); choose alongside the Firestore database location |
 | OAuth audience | Public desktop-client ID in `cloud-run.env.example.yaml` |
@@ -31,7 +33,7 @@ Cloud Run, Firestore, Secret Manager, Cloud Build, Artifact Registry and network
 The source folder is self-contained. Cloud Run builds its Dockerfile into an image; no existing backend image is needed. Do not deploy the whole desktop repository. The Docker/source upload allowlists include only the package files, Dockerfile and server source. [Source deployments](https://docs.cloud.google.com/run/docs/deploying-source-code).
 
 1. Review billing and select your hosting project first. Enable the Cloud Run, Cloud Build, Artifact Registry, Secret Manager and Firestore APIs in that project. The account doing deployment needs the source-deployment permissions described in Google's guide.
-2. Grant the runtime service account **Secret Manager Secret Accessor** on `gemini-horizon-key` only. Cloud Run checks this permission and injects the selected version's value when each instance starts. The server reads `process.env.GEMINI_API_KEY`. Do not create or download a JSON service-account key. [Secret binding](https://docs.cloud.google.com/run/docs/configuring/services/secrets).
+2. Grant the runtime service account **Secret Manager Secret Accessor** on each of `gemini-horizon-key` and `horizon-oauth-client-secret`. The second secret holds the existing Desktop OAuth client's secret, not another Gemini key. Cloud Run injects both selected versions when each instance starts. Neither credential belongs in the desktop app. Do not create or download a JSON service-account key. [Secret binding](https://docs.cloud.google.com/run/docs/configuring/services/secrets).
 3. Create a **Firestore Native mode** database named `(default)`, preferably in `asia-south1`. Set restrictive client rules; the desktop app never accesses Firestore. Grant the runtime service account **Cloud Datastore User** (`roles/datastore.user`) on this backend-only project so the server can update quota records. This role provides broader database access than just the usage collection, so avoid placing unrelated sensitive data in this project. [Firestore server permissions](https://docs.cloud.google.com/firestore/native/docs/security/iam).
 4. Ensure the source-build service account has **Cloud Run Builder** (`roles/run.builder`). This is separate from the runtime account. Google uses the Compute Engine default account for source builds unless overridden; your Cloud Run source-deployment guide explains the binding.
 5. Clone the repository in Cloud Shell and open the service directory:
@@ -48,14 +50,16 @@ The source folder is self-contained. Cloud Run builds its Dockerfile into an ima
 6. Deploy the source, using the actual enabled secret version:
 
    ```bash
-   HORIZON_SECRET_VERSION=1 bash deploy.sh
+   HORIZON_SECRET_VERSION=1 HORIZON_OAUTH_SECRET_VERSION=1 bash deploy.sh
    ```
 
    The default is a private Cloud Run service with 512 MiB memory, one CPU, zero minimum instances, two maximum instances, concurrency four and a 145-second request timeout. The fixed deployment account, project and secret binding are visible in `deploy.sh`. Set `HORIZON_REGION` to override the region. Deploying to a different hosting project requires updating the script and the settings file together.
 
 7. Verify that the service starts. Run `gcloud run services proxy horizon-backend --region asia-south1 --project project-c7d759e1-7d06-4978-bc0`, then request `/health` and `/ready` through the local proxy from a second terminal. Both should return 200 when the secret, allowlist and client ID are configured. Readiness is a configuration check, not proof that Gemini or Firestore are reachable. A real signed-in answer must be tested next. Avoid `/healthz` and other paths ending in `z`: Cloud Run reserves some of them and may return a Google 404 before the request reaches this server. [Reserved Cloud Run paths](https://docs.cloud.google.com/run/docs/known-issues#reserved-url-paths).
 
-Keep the initial service private while testing. Ordinary Horizon users will later need the Cloud Run URL reachable with **application-level Google authentication**. Cloud Run IAM authentication and the app's Google ID token are different checks. Do not remove the Cloud Run IAM check until the signed-in desktop flow and denied-account tests have passed against the deployed service. No shared admin/service-account credential belongs in the app.
+The deployment script keeps Cloud Run private. Desktop sign-in needs its OAuth exchange endpoint reachable before a user has a Google ID token. After reviewing the updated service and its denied-account tests, the owner must explicitly approve allowing requests to reach the app's authentication checks. Cloud Run IAM and Google sign-in are separate layers. All AI requests remain subject to signed-token verification, account allowlisting and durable quota enforcement even if the Cloud Run URL becomes reachable. No shared admin/service-account credential belongs in the app.
+
+Desktop sign-in opens the system browser and uses a random loopback port, state, nonce and PKCE. `/v1/auth/exchange` exchanges the code through Google using the server-only OAuth client secret, verifies the returned ID token and allowlisted identity, and returns only that user's session. `/v1/auth/refresh` verifies the refreshed identity again. Both accept at most 16 KiB, and sign-in traffic is limited to 20 requests/minute per instance with at most four concurrent requests. These bootstrap limits are separate from persistent model quotas. Session tokens are encrypted with Windows account protection on the desktop; IPC exposes only account status. Sign-out removes this device's saved session and cancels a pending login; it does not revoke all Google sessions.
 
 ## API contract
 

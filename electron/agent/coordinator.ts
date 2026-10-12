@@ -18,6 +18,7 @@ import { answerImageQuestion, imagePart, isImageQuestion } from './vision';
 import { ContextAttachment, LatencyReport } from '../../shared/types';
 import { resolveDocuments } from '../attachments';
 import { LatencyTrace } from '../latency';
+import { useHostedService } from '../cloud';
 
 export interface ReActStep {
   stepIndex: number;
@@ -54,6 +55,7 @@ export class AgentCoordinator {
   private systemGraph: SystemKnowledgeGraph;
   private onStateChange?: StateChangeCallback;
   private activeSession?: ReActSessionState;
+  private activeRequest?: AbortController;
   private activeFrameLookup: Map<number, {
     tag_id: number;
     coords: [number, number, number, number];
@@ -123,6 +125,7 @@ export class AgentCoordinator {
   }
 
   public abortSession(reason: string = 'Execution halted by Hardware Panic Kill-Switch.'): void {
+    this.activeRequest?.abort();
     if (this.activeSession) {
       this.activeSession.status = 'error';
       this.activeSession.currentNarration = reason;
@@ -173,6 +176,7 @@ export class AgentCoordinator {
     };
 
     this.inputSynthesizer.reset();
+    this.activeRequest = new AbortController();
     this.activeFrameLookup.clear();
     const projectIntent = !plannerOverride ? parseProjectOpen(prompt) : null;
     const reflexiveIntent = !plannerOverride ? this.reflexiveMatcher.match(prompt) : null;
@@ -188,18 +192,19 @@ export class AgentCoordinator {
 
     const hasDocuments = attachments.some(item => item.type === 'pdf' || item.type === 'file');
     const hasFileContext = hasDocuments || attachments.some(item => item.type === 'image');
-    if (hasFileContext || (!plannerOverride && process.env.MOCK_PLANNER !== 'true' && isImageQuestion(prompt, images))) {
-      const trace = new LatencyTrace([...new Set(attachments.map(item => item.type))].join('+') || 'image');
+    const hostedQuestion = useHostedService() && !projectIntent && !reflexiveIntent && !plannerOverride && process.env.MOCK_PLANNER !== 'true';
+    if (hasFileContext || hostedQuestion || (!plannerOverride && process.env.MOCK_PLANNER !== 'true' && isImageQuestion(prompt, images))) {
+      const trace = new LatencyTrace([...new Set(attachments.map(item => item.type))].join('+') || (images.length ? 'image' : 'text'));
       for (const item of attachments) {
         const captured = item.traceId ? LatencyTrace.get(item.traceId)?.report() : undefined;
         for (const stage of captured?.stages || []) trace.add(`attachment_${stage.name}`, stage.durationMs, stage.status);
       }
-      this.activeSession.currentNarration = hasDocuments ? 'Reading your attachment…' : 'Reading your screen…';
+      this.activeSession.currentNarration = hasDocuments ? 'Reading your attachment…' : images.length ? 'Reading your screen…' : 'Thinking…';
       this.notify();
       let result: { finalAnswer?: string; error?: string };
       try {
         const documents = await trace.measure('attachment_context_loading', () => resolveDocuments(attachments));
-        result = await answerImageQuestion(prompt, images, history, this.requestLimiter, fetch, { documents, trace,
+        result = await answerImageQuestion(prompt, images, history, this.requestLimiter, fetch, { documents, trace, signal: this.activeRequest.signal,
           onPartial: text => { if (this.activeSession?.status === 'working') { this.activeSession.currentNarration = text; this.notify(); } } });
       } catch (error) { result = { error: error instanceof Error ? error.message : 'Could not read the attachment. Reattach it.' }; }
       // Attachments never grant permission to execute document instructions.
@@ -1051,6 +1056,7 @@ Respond ONLY with a valid JSON object matching:
       return this.fallbackDeterministicPlanner(state);
     }
 
+    if (useHostedService()) return { error: 'This desktop action is not available through Horizon’s answer service. Project opening and supported local commands remain available.' };
     // 1. Primary Cloud Planner: Google Gemini (gemini-3.5-flash-lite)
     if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'your_gemini_api_key_here') {
       const geminiPlan = await this.queryGeminiPlanner(state);

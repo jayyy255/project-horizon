@@ -14,7 +14,7 @@ export function loadConfig(env = process.env) {
   return {
     port: integer(env, 'PORT', 8080, 1, 65535),
     projectId: env.GOOGLE_CLOUD_PROJECT || env.GCLOUD_PROJECT,
-    apiKey: env.GEMINI_API_KEY || '', audience, allowedEmails, models,
+    apiKey: env.GEMINI_API_KEY || '', oauthClientSecret: env.GOOGLE_OAUTH_CLIENT_SECRET || '', audience, allowedEmails, models,
     requestTimeoutMs: integer(env, 'MODEL_TIMEOUT_MS', 60000, 1000, 120000),
     limits: {
       userMinute: integer(env, 'USER_CALLS_PER_MINUTE', 10, 1, 100),

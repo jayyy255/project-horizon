@@ -7,26 +7,28 @@ import { googleAuthenticator } from './auth.js';
 import { FirestoreQuota } from './quota.js';
 import { streamAnswer, modelBody } from './gemini.js';
 import { MAX_BODY_BYTES, validateQuestion } from './validation.js';
+import { oauthBroker } from './oauth.js';
 
-async function readQuestion(req) {
+async function readJSON(req, maximum = MAX_BODY_BYTES) {
   if (!/^application\/json(?:;.*)?$/i.test(req.headers['content-type'] || '')) throw new ServiceError(415, 'json_required', 'Send JSON question context.');
   if (req.headers['content-encoding'] && req.headers['content-encoding'] !== 'identity') throw new ServiceError(415, 'encoding_not_supported', 'Compressed uploads are unsupported.');
   const length = req.headers['content-length'];
-  if (length && (!/^\d+$/.test(length) || Number(length) > MAX_BODY_BYTES)) throw new ServiceError(413, 'upload_too_large', 'Upload exceeds 20 MB.');
+  if (length && (!/^\d+$/.test(length) || Number(length) > maximum)) throw new ServiceError(413, 'upload_too_large', 'Upload exceeds the request limit.');
   const chunks = []; let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > MAX_BODY_BYTES) throw new ServiceError(413, 'upload_too_large', 'Upload exceeds 20 MB.');
+    if (size > maximum) throw new ServiceError(413, 'upload_too_large', 'Upload exceeds the request limit.');
     chunks.push(chunk);
   }
   let body;
   try { body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks))); }
   catch { throw new ServiceError(400, 'invalid_json', 'Invalid JSON question.'); }
-  return validateQuestion(body);
+  return body;
 }
 
-export function createService(config, { authenticate = googleAuthenticator(config), quota = new FirestoreQuota(config), request = fetch, log = record => console.log(JSON.stringify(record)) } = {}) {
+export function createService(config, { authenticate = googleAuthenticator(config), quota = new FirestoreQuota(config), request = fetch, signIn = oauthBroker(config), log = record => console.log(JSON.stringify(record)) } = {}) {
   let inFlight = 0;
+  const signInAttempts = [];
   const server = http.createServer(async (req, res) => {
     const id = randomUUID(), started = performance.now(), controller = new AbortController();
     let counted = false, finished = false;
@@ -40,14 +42,22 @@ export function createService(config, { authenticate = googleAuthenticator(confi
       // use /health and /ready for deployed checks.
       if (req.method === 'GET' && ['/health', '/healthz'].includes(req.url)) { json(200, { status: 'ok' }); return; }
       if (req.method === 'GET' && ['/ready', '/readyz'].includes(req.url)) { json(configured(config) ? 200 : 503, { ready: configured(config) }); return; }
-      if (req.method !== 'POST' || req.url !== '/v1/answer') throw new ServiceError(404, 'not_found', 'Endpoint not found.');
+      if (req.method !== 'POST' || !['/v1/answer', '/v1/auth/exchange', '/v1/auth/refresh'].includes(req.url)) throw new ServiceError(404, 'not_found', 'Endpoint not found.');
       if (!configured(config)) throw new ServiceError(503, 'not_configured', 'Horizon access is not configured.');
       if (inFlight >= 4) throw new ServiceError(429, 'busy', 'Horizon is busy. Try again shortly.', 5);
       inFlight++; counted = true;
+      if (req.url.startsWith('/v1/auth/')) {
+        const now = Date.now();
+        while (signInAttempts.length && signInAttempts[0] <= now - 60000) signInAttempts.shift();
+        if (signInAttempts.length >= 20) throw new ServiceError(429, 'sign_in_busy', 'Sign-in is busy. Try again shortly.', 60);
+        signInAttempts.push(now);
+        const tokens = await signIn(req.url.endsWith('/exchange') ? 'exchange' : 'refresh', await readJSON(req, 16384));
+        json(200, tokens); return;
+      }
       const authAt = performance.now();
       const user = await authenticate(req.headers.authorization);
       const authMs = performance.now() - authAt;
-      const question = await readQuestion(req);
+      const question = validateQuestion(await readJSON(req));
       for (const model of config.models) modelBody(question, model);
       // Reserve the first call before opening the stream, so denied usage can
       // return an ordinary HTTP 429 rather than a successful SSE response.

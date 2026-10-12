@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 app.setPath('userData', path.resolve('scratch/vision-regressions-' + Date.now()));
 app.whenReady().then(async () => {
+  process.env.HORIZON_GEMINI_DIRECT = '1';
   const { answerImageQuestion, imagePart, isImageQuestion, VISION_DEADLINE_MS } = require('../dist-electron/electron/agent/vision');
   const { RequestLimiter } = require('../dist-electron/electron/agent/rateLimit');
   const image = nativeImage.createFromBitmap(Buffer.alloc(16, 255), { width: 2, height: 2 }).toDataURL();

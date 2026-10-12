@@ -19,6 +19,6 @@ export function googleAuthenticator(config, client = new OAuth2Client()) {
     // Google is authoritative for Gmail and Workspace addresses. Third-party
     // addresses require an additional ownership check before email allowlisting.
     if (!email.endsWith('@gmail.com') && !payload.hd) throw new ServiceError(403, 'account_not_allowed', 'Use an approved Gmail or Google Workspace account.');
-    return { subject: payload.sub };
+    return { subject: payload.sub, email, nonce: payload.nonce };
   };
 }

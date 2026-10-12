@@ -70,7 +70,11 @@ export interface HorizonAPI {
   recordRenderLatency?: (id: string, durationMs: number) => Promise<void>;
   setFloatingState?: (state: { completed: boolean; busy: boolean }) => Promise<void>;
   onFloatingNewChat?: (callback: () => void) => () => void;
-  getGeminiStatus?: () => Promise<{ configured: boolean; ownerProvided?: boolean }>;
+  getGeminiStatus?: () => Promise<{ configured: boolean; ownerProvided?: boolean; hosted?: boolean; signedIn?: boolean; signingIn?: boolean; email?: string }>;
+  signIn?: () => Promise<{ configured: boolean; hosted?: boolean; signedIn?: boolean; signingIn?: boolean; email?: string }>;
+  cancelSignIn?: () => Promise<void>;
+  signOut?: () => Promise<{ configured: boolean; hosted?: boolean; signedIn?: boolean; signingIn?: boolean; email?: string }>;
+  onAccountStatus?: (callback: (status: { signedIn: boolean; signingIn: boolean; email?: string }) => void) => () => void;
   saveGeminiKey?: (key: string) => Promise<{ configured: boolean; ownerProvided?: boolean }>;
   getWorkspaceRoots?: () => Promise<string[]>;
   addWorkspaceRoot?: () => Promise<string[]>;

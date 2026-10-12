@@ -60,7 +60,7 @@ function authenticator() {
   return googleAuthenticator(config(), client);
 }
 test('Google signature verification accepts the approved identity', async () => {
-  assert.deepEqual(await authenticator()('Bearer ' + signed()), { subject: '12345' });
+  assert.deepEqual(await authenticator()('Bearer ' + signed()), { subject: '12345', email: 'approved@gmail.com', nonce: undefined });
 });
 test('Wrong audience, issuer, expired and forged Google tokens cannot use the key', async () => {
   for (const changes of [{ aud: 'other.apps.googleusercontent.com' }, { iss: 'https://attacker.invalid' }, { exp: Math.floor(Date.now() / 1000) - 600 }]) {
@@ -240,5 +240,24 @@ test('HTTP malformed JSON and compressed or oversized uploads are rejected', asy
 test('HTTP provider failures after partial output are explicit SSE errors without done', async () => {
   await withServer({ request: async () => sse([answer('partial'), { error: { message: 'sensitive' } }]) }, async url => {
     const text = await (await post(url)).text(); assert.match(text, /"type":"error"/); assert.doesNotMatch(text, /"type":"done"/); assert.doesNotMatch(text, /sensitive/);
+  });
+});
+test('HTTP sign-in can bootstrap while model requests still require a verified Google identity', async () => {
+  let modelCalls = 0;
+  await withServer({ authenticate: googleAuthenticator(config()), signIn: async () => ({ idToken: 'synthetic.id.token', refreshToken: 'synthetic-refresh' }), request: async () => { modelCalls++; return sse([answer('unused')]); } }, async url => {
+    const exchange = await fetch(url + '/v1/auth/exchange', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    assert.equal(exchange.status, 200);
+    assert.equal((await post(url)).status, 401);
+    assert.equal(modelCalls, 0);
+  });
+});
+test('HTTP sign-in limits small uploads and throttles repeated bootstrap calls', async () => {
+  let calls = 0;
+  await withServer({ signIn: async () => { calls++; return { signedIn: true }; } }, async url => {
+    const requestSignIn = body => fetch(url + '/v1/auth/exchange', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+    assert.equal((await requestSignIn(' '.repeat(16385))).status, 413);
+    for (let index = 1; index < 20; index++) assert.equal((await requestSignIn('{}')).status, 200);
+    const limited = await requestSignIn('{}'); assert.equal(limited.status, 429); assert.equal(limited.headers.get('retry-after'), '60');
+    assert.equal(calls, 19);
   });
 });

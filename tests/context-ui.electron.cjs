@@ -1,18 +1,28 @@
-// Native app workflow. Only generated fixtures are sent to the live provider.
-const { app, BrowserWindow, desktopCapturer, globalShortcut, dialog } = require('electron');
+// Native hosted workflow with synthetic sessions and answers; no cloud calls.
+const { app, BrowserWindow, desktopCapturer, globalShortcut, dialog, safeStorage } = require('electron');
 const fs = require('node:fs'), path = require('node:path');
 app.disableHardwareAcceleration();
 app.setPath('userData', path.resolve('scratch/context-ui-' + Date.now()));
-const out = path.resolve('docs/verification/context-2026-10-11', process.env.HORIZON_TEST_PACKAGE_ROOT ? 'packaged' : '.'); fs.mkdirSync(out, { recursive: true });
-const report = { checks: [], live: [], errors: [] }, callbacks = new Map();
+const out = path.resolve('docs/verification/hosted-2026-10-12', process.env.HORIZON_TEST_PACKAGE_ROOT ? 'packaged' : '.'); fs.mkdirSync(out, { recursive: true });
+app.whenReady().then(() => {
+  fs.mkdirSync(app.getPath('userData'), { recursive: true });
+  fs.writeFileSync(path.join(app.getPath('userData'), 'horizon-account.enc'), safeStorage.encryptString(JSON.stringify({ idToken: 'synthetic.id.token', refreshToken: 'synthetic-refresh', expiresAt: Date.now() + 3600000, email: 'approved@example.test', subject: 'synthetic-subject' })));
+});
+const report = { checks: [], fixtures: [], errors: [] }, callbacks = new Map();
 const register = globalShortcut.register.bind(globalShortcut);
 globalShortcut.register = (key, callback) => { callbacks.set(key, callback); return register(key, callback); };
 const realFetch = global.fetch;
 global.fetch = async (url, options) => {
-  if (!String(url).includes('generativelanguage.googleapis.com')) return realFetch(url, options);
-  return new Response('data: ' + JSON.stringify({ candidates: [{ content: { parts: [{ text: 'The launch date is October 20. The budget is 420 dollars.' }] } }] }) + '\n\n', { headers: { 'content-type': 'text/event-stream' } });
+  if (!String(url).endsWith('/v1/answer')) {
+    if (!/^http:\/\/127\.0\.0\.1(?::\d+)?\//.test(String(url))) throw Error('External requests are disabled in the hosted UI test');
+    return realFetch(url, options);
+  }
+  if (options.headers.Authorization !== 'Bearer synthetic.id.token' || options.headers['x-goog-api-key']) throw Error('Hosted authentication was not used');
+  const text = 'The launch date is October 20. The budget is 420 dollars.';
+  return new Response([{ type: 'delta', text }, { type: 'done', text }].map(event => 'data: ' + JSON.stringify(event) + '\n\n').join(''), { headers: { 'content-type': 'text/event-stream' } });
 };
 require(path.join(process.env.HORIZON_TEST_PACKAGE_ROOT || path.resolve('dist-electron'), 'electron/main.js'));
+process.env.HORIZON_GEMINI_DIRECT = '0';
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const run = (win, code) => win.webContents.executeJavaScript(code);
 async function until(fn, timeout = 20000) { const started = Date.now(); while (Date.now() - started < timeout) { const result = await fn().catch(() => null); if (result) return result; await sleep(80); } throw new Error('Workflow check timed out'); }
@@ -27,6 +37,8 @@ function pdf(text) {
 app.whenReady().then(async () => {
   try {
     const main = await until(async () => BrowserWindow.getAllWindows().find(win => /index.html$/.test(win.webContents.getURL())));
+    const account = await run(main, 'window.horizonAPI.getGeminiStatus()');
+    check('Hosted account status contains no credentials', account.hosted && account.configured && !('idToken' in account) && !('refreshToken' in account));
     await until(() => run(main, 'Boolean(document.querySelector(".consent-secondary"))'));
     await run(main, 'document.querySelector(".consent-secondary").click()');
     await run(main, 'window.horizonAPI.approveHotkey()');
@@ -61,8 +73,7 @@ app.whenReady().then(async () => {
     check('Real file picker path scans a PDF and shows an answer', await run(bar, 'Boolean(document.querySelector("[title*=\\\"Defender scan completed\\\"]"))&&!document.querySelector(".message-error")'));
     await run(bar, 'document.querySelector(".timing-details").open=true'); await shot(bar, 'pdf-answer-dark');
     await run(main, 'document.querySelector("[aria-label=\\\"Toggle Light / Dark Mode\\\"]").click()'); await until(() => run(bar, 'document.documentElement.classList.contains("light-mode")')); await shot(bar, 'pdf-answer-light');
-    // Live service samples use only generated images/documents, never desktop pixels.
-    global.fetch = realFetch;
+    // Prepared image/document samples also stay mocked.
     for (const kind of ['fullscreen','crop','pdf','file']) {
       await reset();
       if (kind === 'fullscreen') { await run(bar, 'document.querySelector("[aria-label=\\\"Full Screen\\\"]").click()'); await until(() => run(bar, 'Boolean(document.querySelector("img[alt=\\\"Crop preview\\\"]"))')); }
@@ -81,13 +92,23 @@ app.whenReady().then(async () => {
         await run(bar, 'document.querySelector("[aria-label=\\\"Attach file\\\"]").click()'); await until(() => run(bar, `document.body.textContent.includes('plan.${kind === 'pdf' ? 'pdf' : 'txt'}')`));
       }
       const text = await send(kind === 'pdf' ? 'Read the launch date from this PDF page layout.' : 'What is the launch date?');
+      check(kind + ' returns the hosted fixture answer', text.includes('October 20'));
       const session = await until(() => run(bar, '(()=>{const sessions=JSON.parse(localStorage.getItem("horizon_chat_sessions")); const current=sessions.find(s=>s.id===localStorage.getItem("horizon_active_session_id"));return current?.messages.at(-1)?.latency?current:null})()'));
       const message = session.messages.at(-1);
       const timing = await until(() => run(bar, `window.horizonAPI.getLatencyReport(${JSON.stringify(message.latency?.id)}).then(report=>report?.stages.some(stage=>stage.name==='answer_render')?report:null)`));
       check(kind + ' exposes step timings for this answer', timing && timing.source === kind);
-      report.live.push({ kind, status: message.status, answer: text, timing }); console.log(JSON.stringify(report.live.at(-1)));
-      await run(bar, 'document.querySelector(".timing-details").open=true'); await shot(bar, kind + '-live');
+      report.fixtures.push({ kind, status: message.status, answer: text, timing }); console.log(JSON.stringify(report.fixtures.at(-1)));
+    await run(bar, 'document.querySelector(".timing-details").open=true'); await shot(bar, kind + '-fixture');
     }
+    await run(main, 'document.querySelector("[aria-label=Preferences]").click()');
+    await until(() => run(main, 'Boolean([...document.querySelectorAll("button")].find(button=>button.textContent==="Inference Engine"))'));
+    await run(main, '[...document.querySelectorAll("button")].find(button=>button.textContent==="Inference Engine").click()');
+    await until(() => run(main, 'document.body.textContent.includes("Signed in as approved@example.test.")'));
+    check('Native preferences use the Horizon account without an API-key form', await run(main, '!document.querySelector("#gemini-api-key")'));
+    await shot(main, 'account-dark');
+    await run(main, 'window.horizonAPI.signOut()');
+    await until(() => run(main, 'document.body.textContent.includes("Sign in with Google")'));
+    check('Sign-out removes the encrypted session and updates preferences', !fs.existsSync(path.join(app.getPath('userData'), 'horizon-account.enc')));
     check('Native UI produced no renderer errors', report.errors.length === 0, report.errors);
     report.passed = true;
   } catch (error) { report.passed = false; report.error = error.stack; console.error(error.message); }

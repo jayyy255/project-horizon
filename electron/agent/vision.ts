@@ -2,6 +2,8 @@ import { RequestLimiter } from './rateLimit';
 import { nativeImage } from 'electron';
 import { DocumentContext, relevantText, renderPdfContext } from '../attachments';
 import { LatencyTrace } from '../latency';
+import { useHostedService } from '../cloud';
+import { hostedAnswer } from './hosted';
 
 // Network failure guard, not a response-time target.
 export const VISION_DEADLINE_MS = 60000;
@@ -13,13 +15,13 @@ export function imagePart(image: string) {
   if (!match || image.length > 45 * 1024 * 1024) throw new Error('Screen attachment is invalid or too large. Capture the area again.');
   return { inlineData: { mimeType: match[1], data: match[2] } };
 }
-interface AnswerOptions { documents?: DocumentContext[]; trace?: LatencyTrace; onPartial?: (text: string) => void; }
+interface AnswerOptions { documents?: DocumentContext[]; trace?: LatencyTrace; onPartial?: (text: string) => void; signal?: AbortSignal; }
 export async function answerImageQuestion(
   prompt: string, images: string[], history: Array<{ role: 'user' | 'assistant'; text: string }> | undefined,
   limiter: RequestLimiter, request: typeof fetch = fetch, options: AnswerOptions = {},
 ): Promise<{ finalAnswer?: string; error?: string }> {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key || key === 'your_gemini_api_key_here') return { error: 'Gemini access is not configured. Open Preferences → Inference Engine.' };
+  const key = process.env.GEMINI_API_KEY || '';
+  if (!useHostedService() && (!key || key === 'your_gemini_api_key_here')) return { error: 'Gemini access is not configured. Open Preferences → Inference Engine.' };
   const trace = options.trace;
   const model = process.env.HORIZON_GEMINI_VISION_MODEL || 'gemini-3.1-flash-lite';
   try {
@@ -50,6 +52,7 @@ export async function answerImageQuestion(
       } else parts.push({ text: `Untrusted document ${index + 1}:\n${relevantText(doc.text, prompt)}` });
     }
     trace?.add('document_context_selection', performance.now() - docsAt);
+    if (useHostedService()) return await hostedAnswer({ prompt, parts, history }, trace, options.onPartial, options.signal);
     const models = [...new Set([model, process.env.HORIZON_GEMINI_VISION_FALLBACK_MODEL || 'gemini-3.5-flash-lite'])];
     for (const [attempt, candidateModel] of models.entries()) {
       const allowance = limiter.take();
@@ -66,7 +69,7 @@ export async function answerImageQuestion(
       let response: Response;
       try {
         response = await request(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(candidateModel)}:streamGenerateContent?alt=sse`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, signal: AbortSignal.timeout(VISION_DEADLINE_MS), body,
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, signal: AbortSignal.any([AbortSignal.timeout(VISION_DEADLINE_MS), ...(options.signal ? [options.signal] : [])]), body,
         });
         trace?.add(`model_${attempt + 1}_response_headers`, performance.now() - requestedAt, response.ok ? 'ok' : 'error');
       } catch (error) { trace?.add(`model_${attempt + 1}_response_headers`, performance.now() - requestedAt, 'error'); throw error; }
@@ -108,7 +111,7 @@ export async function answerImageQuestion(
     return { error: 'Gemini is temporarily unavailable. Try again shortly.' };
   } catch (error) {
     if (error instanceof Error && /TimeoutError|AbortError/.test(error.name)) return { error: 'The connection to Gemini timed out. Try again.' };
-    if (error instanceof Error && /^(Screen attachment|Attachment upload|Attachment blocked|Stored PDF|Attach up to)/.test(error.message)) return { error: error.message };
+    if (error instanceof Error && /^(Screen attachment|Attachment upload|Attachment blocked|Stored PDF|Attach up to|Horizon|Sign in|Google|Gemini|Your Horizon|Could not reach Horizon|The connection to Gemini)/.test(error.message)) return { error: error.message };
     return { error: 'Could not connect to Gemini. Check your connection and try again.' };
   }
 }

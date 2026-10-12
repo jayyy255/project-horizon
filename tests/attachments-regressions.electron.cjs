@@ -15,6 +15,7 @@ function pdf(text, extra = '') {
   return Buffer.from(source);
 }
 app.whenReady().then(async () => {
+  process.env.HORIZON_GEMINI_DIRECT = '1';
   const { ingestAttachment, resolveDocuments, inspectPdf, relevantText, screenInjection, renderPdfContext } = runtime('attachments');
   const { LatencyTrace, latencyLogPath } = runtime('latency');
   const reports = [];

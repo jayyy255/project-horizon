@@ -1,5 +1,6 @@
 // Regression tests exercise the production Electron coordinator; OS launches are stubbed here.
 const assert = require('node:assert/strict');
+process.env.HORIZON_GEMINI_DIRECT = '1'; // Explicit legacy planner fixture coverage.
 const fs = require('node:fs');
 const path = require('node:path');
 const repo = process.cwd();
