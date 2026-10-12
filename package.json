@@ -16,6 +16,7 @@
     "build:all": "npm run build:frontend && npm run build:agent && npm run build:electron",
     "test:frontend": "npm run test --prefix frontend",
     "test:agent": "npm run test --prefix backend/agent-service",
+    "test:hosted": "npm run test --prefix backend/gemini-service",
     "test:desktop:commands": "npm run build:electron && electron tests/command-regressions.electron.cjs",
     "test:desktop:hotkeys": "npm run build:electron && node --test tests/hotkeys.cjs tests/rate-limit.cjs",
     "test:desktop:vision": "npm run build:electron && electron tests/vision-regressions.electron.cjs",

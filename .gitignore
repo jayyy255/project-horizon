@@ -74,6 +74,7 @@ scratch/
 *.pem
 *.key
 *.cert
+backend/gemini-service/cloud-run.env.yaml
 
 # Operating System & IDE
 .DS_Store

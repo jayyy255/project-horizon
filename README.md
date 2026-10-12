@@ -12,6 +12,8 @@ The latest source version is **1.1.4** for Windows 10/11 (x64). The shared-acces
 
 A replacement with server-side credentials has not been released. For personal use, build the standard installer with `npm run package:win` and configure your own Gemini key. Keep shared production credentials on a backend, outside desktop installers and source control.
 
+The [hosted Gemini backend](backend/gemini-service/README.md) now has source-deployment files, Google-account verification and persistent server-side usage limits. It is locally tested but not deployed or connected to the current desktop app.
+
 To upgrade, **Quit Horizon from the system tray**, then run the new installer. Your saved shortcut and chats remain in your Windows user profile. You do not need to uninstall the previous version.
 
 On first launch, review the consent screen and choose **Continue** to enable the global shortcut. New profiles start with **Ctrl + Alt + H**. Existing profiles keep their saved choice, including **Ctrl + Space**. If a shortcut is unavailable, Horizon tries another available choice and shows the active binding in **Preferences → Hotkey Trigger**. Keep Horizon running in the tray to use the shortcut outside its workspace. This release does not start automatically when you sign in to Windows; launch Horizon first.
