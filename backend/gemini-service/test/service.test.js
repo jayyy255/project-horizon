@@ -195,6 +195,8 @@ const post = (url, body = question, headers = {}) => fetch(url + '/v1/answer', {
 test('HTTP service streams answers and omits credentials and question content from logs', async () => {
   const logs = [];
   await withServer({ log: record => logs.push(record) }, async url => {
+    assert.deepEqual(await (await fetch(url + '/health')).json(), { status: 'ok' });
+    assert.deepEqual(await (await fetch(url + '/ready')).json(), { ready: true });
     const response = await post(url); const text = await response.text();
     assert.equal(response.status, 200); assert.match(text, /October 20/); assert.match(text, /"type":"done"/);
     assert.equal(response.headers.get('cache-control'), 'no-store, no-transform');
@@ -216,8 +218,8 @@ test('HTTP exhausted quota returns 429 and Retry-After before opening a stream',
 });
 test('HTTP startup stays alive but denies inference when auth configuration is missing', async () => {
   await withServer({}, async url => {
-    assert.equal((await fetch(url + '/healthz')).status, 200);
-    assert.equal((await fetch(url + '/readyz')).status, 503);
+    assert.equal((await fetch(url + '/health')).status, 200);
+    assert.equal((await fetch(url + '/ready')).status, 503);
     assert.equal((await post(url)).status, 503);
   }, { ...config(), audience: [] });
 });

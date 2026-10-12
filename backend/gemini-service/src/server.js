@@ -36,8 +36,10 @@ export function createService(config, { authenticate = googleAuthenticator(confi
     req.on('aborted', () => controller.abort());
     const json = (status, value) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(value)); };
     try {
-      if (req.method === 'GET' && req.url === '/healthz') { json(200, { status: 'ok' }); return; }
-      if (req.method === 'GET' && req.url === '/readyz') { json(configured(config) ? 200 : 503, { ready: configured(config) }); return; }
+      // Cloud Run reserves some paths ending in z. Keep old local aliases, but
+      // use /health and /ready for deployed checks.
+      if (req.method === 'GET' && ['/health', '/healthz'].includes(req.url)) { json(200, { status: 'ok' }); return; }
+      if (req.method === 'GET' && ['/ready', '/readyz'].includes(req.url)) { json(configured(config) ? 200 : 503, { ready: configured(config) }); return; }
       if (req.method !== 'POST' || req.url !== '/v1/answer') throw new ServiceError(404, 'not_found', 'Endpoint not found.');
       if (!configured(config)) throw new ServiceError(503, 'not_configured', 'Horizon access is not configured.');
       if (inFlight >= 4) throw new ServiceError(429, 'busy', 'Horizon is busy. Try again shortly.', 5);
