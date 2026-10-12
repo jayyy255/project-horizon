@@ -4,11 +4,13 @@
 
 Horizon is a Windows desktop assistant for asking questions about your screen or documents, finding local projects, and opening them in VS Code. A global shortcut opens a small prompt over the app you are using. You can ask a text-only question, select part of the screen, attach the full display, or choose a PDF, image or text/code file. Answers stream into the floating assistant; the workspace keeps your chats and shows the execution trace for actions.
 
-The current build is **1.1.4** for Windows 10/11 (x64). See the [changelog](CHANGELOG.md) for changes and validation.
+The latest source version is **1.1.4** for Windows 10/11 (x64). The shared-access installers have been withdrawn. See the [changelog](CHANGELOG.md) for changes and validation.
 
 ## Install
 
-Download the [Windows 1.1.4 friends installer](https://github.com/jayyy255/project-horizon/releases/download/v1.1.4/Project-Horizon-Friends-Setup-1.1.4-x64.exe), or view the [release notes and downloads](https://github.com/jayyy255/project-horizon/releases/tag/v1.1.4). You need access to the private repository to download it. The installer includes Gemini access supplied by the app owner, so friends do not enter an API key. It is unsigned and may show a Windows security prompt.
+**Installer withdrawal — 12 October 2026:** The friends installers for versions 1.1.1–1.1.4 and their checksum files have been removed from GitHub releases because they contained an owner-provided Gemini credential. That credential has been revoked. Existing copies no longer provide shared Gemini access; do not redistribute them. The repository is public. See the [withdrawal notice](https://github.com/jayyy255/project-horizon/releases/tag/v1.1.4).
+
+A replacement with server-side credentials has not been released. For personal use, build the standard installer with `npm run package:win` and configure your own Gemini key. Keep shared production credentials on a backend, outside desktop installers and source control.
 
 To upgrade, **Quit Horizon from the system tray**, then run the new installer. Your saved shortcut and chats remain in your Windows user profile. You do not need to uninstall the previous version.
 
@@ -58,7 +60,7 @@ The visual PDF sample includes 0.35 s of local page rendering; most of its time 
 - The shortcut alone does not capture the screen. You choose when to attach context. Action requests may also inspect the screen as part of the requested task. When Gemini handles an attachment question, the prompt, recent conversation and selected image/document context are sent to Google. Text PDFs normally send extracted text; scanned PDFs and visual questions send locally rendered images of up to three relevant pages. Ask for **page 5**, for example, to inspect another page. The original stays local for follow-ups. Screen element detection runs on the device.
 - Chats, project indexes, and audit records are stored on your computer. Standard-build Gemini keys are encrypted for the Windows account.
 - Scanned document copies and extracted context are retained locally for follow-ups. Executables, archives, Office documents/macros, binary text and active PDF content are blocked. Defender must be enabled with current definitions; scan failures block use. Explicit injection patterns are screened, and file/PDF questions have no desktop tools. Antivirus and injection defenses reduce risk; they cannot certify that every unknown threat is absent.
-- The temporary friends installer contains an owner-provided Gemini credential in its packaged resources. Recipients can extract it. Keep the installer and its download link within the intended private group. Local limits of 10 model calls per minute and 100 per rolling 24 hours reduce accidental use, but cannot enforce a secure per-user quota. A hosted service is needed for that.
+- The withdrawn friends installers contained an extractable owner-provided Gemini credential, which has been revoked. A copy of that revoked credential also remains in older Git history; removing current files does not remove historical copies. Local limits of 10 model calls per minute and 100 per rolling 24 hours reduce accidental use, but cannot enforce a secure per-user quota. Shared production access requires a hosted service with server-side credentials and usage limits.
 
 ## Troubleshooting
 
@@ -97,7 +99,7 @@ npm run build:desktop
 npm run package:win
 ```
 
-The private friends build is an explicit opt-in described in the [packaging notes](packaging/README.md). Never commit a Gemini key or the generated installer to this repository.
+The legacy friends build embeds an extractable credential and must not be used to distribute a replacement production key. Its release publisher refuses publication to a public repository. See the [packaging notes](packaging/README.md) for standard build details. Never commit a Gemini key or the generated installer to this repository.
 
 For native UI checks with live generated attachment questions, run `npm run test:desktop:context-ui`. This requires configured Gemini access and working Microsoft Defender, sends generated fixtures to Gemini, and consumes API quota.
 
