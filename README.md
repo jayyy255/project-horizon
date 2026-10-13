@@ -10,7 +10,7 @@ The latest source version is **1.1.5** for Windows 10/11 (x64), with hosted answ
 
 **Installer withdrawal — 12 October 2026:** The friends installers for versions 1.1.1–1.1.4 and their checksum files have been removed from GitHub releases because they contained an owner-provided Gemini credential. That credential has been revoked. Existing copies no longer provide shared Gemini access; do not redistribute them. The repository is public. See the [withdrawal notice](https://github.com/jayyy255/project-horizon/releases/tag/v1.1.4).
 
-A replacement installer has not been published yet. The standard `npm run package:win` build uses server-side credentials without sign-in; it includes no Gemini key or OAuth client secret.
+Download the [Windows x64 installer for 1.1.5](https://github.com/jayyy255/project-horizon/releases/download/v1.1.5/Project-Horizon-Setup-1.1.5-x64.exe), or open the [release page](https://github.com/jayyy255/project-horizon/releases/tag/v1.1.5). The standard build uses server-side credentials without sign-in; it includes no Gemini key or OAuth client secret.
 
 The [hosted Gemini backend](backend/gemini-service/README.md) is deployed with owner-approved public access and persistent shared usage limits. Ordinary users can ask directly without configuring Google Cloud. Owners maintaining their own backend should include `HORIZON_PUBLIC_ACCESS=1` on deployments to retain anonymous desktop access.
 
