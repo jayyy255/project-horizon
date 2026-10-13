@@ -10,6 +10,7 @@ async function main() {
   process.chdir(root);
   const version = require('../package.json').version;
   const friends = process.argv.includes('--friends');
+  if (friends) throw new Error('Credential-containing friends installers are retired. Publish the standard hosted build.');
   const tag = `v${version}`;
   const repository = 'jayyy255/project-horizon';
   const installerName = `Project-Horizon-${friends ? 'Friends-' : ''}Setup-${version}-x64.exe`;
@@ -23,6 +24,10 @@ async function main() {
   if (report.version !== version || report.passed !== true || report.checks?.length < (friends ? 16 : 12)
     || report.checks.some((check) => check.passed !== true)) {
     throw new Error('The packaged smoke checks must pass before publishing.');
+  }
+  const live = JSON.parse(fs.readFileSync(path.join(root, 'release/package-verification-live.json'), 'utf8'));
+  if (live.version !== version || live.passed !== true || ['text', 'image', 'pdf'].some(kind => !live.checks?.some(check => check.name === `Live ${kind} answer in the packaged floating bar` && check.passed === true))) {
+    throw new Error('Live packaged text, image and PDF answers must pass before publishing.');
   }
   const checksum = crypto.createHash('sha256').update(fs.readFileSync(installer)).digest('hex');
   const checksumFile = path.join(root, 'release', 'SHA256SUMS.txt');
@@ -59,7 +64,7 @@ async function main() {
       : '')
     + '\n\nDownload the x64 setup executable below. Run the setup wizard and approve first-run consent. '
     + (friends ? 'This temporary friends build includes owner-provided Gemini access; users do not enter an API key. Keep this installer private. '
-      : 'Enter your own Gemini API key in Preferences → Inference Engine. ')
+      : 'Ask directly in the floating assistant or workspace; no sign-in, invite code or API-key entry is needed. The Gemini key stays server-side, and requests share the app owner’s usage allowance. ')
     + 'Python and the perception models are included; no separate Python installation is needed.\n\n'
     + `SHA-256: \`${checksum}\`\n`;
   let release = await api(`/releases/tags/${tag}`, { allowMissing: true });

@@ -2,7 +2,7 @@
 
 This personal-project service streams text, image and document answers without Google sign-in or invite codes. The Gemini credential stays in Secret Manager and is injected into the Cloud Run runtime. No provider key or OAuth secret is included in the desktop installer or source upload. The backend owns model selection, output limits and a persistent shared usage allowance. It answers questions; it does not execute desktop tools or supply an action planner.
 
-**Deployment status:** the initial authenticated service is deployed, and the owner confirmed `/health` and `/ready`. The owner approved public access with the shared quota on 13 October 2026. The account-free source still needs redeployment with public access enabled, followed by a live answer test. Local fixtures do not establish live Gemini or Firestore availability. No cloud permissions have been changed by preparing this source.
+**Deployment status:** the owner approved public access with the shared quota and deployed revision `horizon-backend-00003-s82` on 13 October 2026. Anonymous health/readiness checks and a real Gemini answer succeeded through the URL built into the desktop app. Live text, generated image and harmless PDF answers also succeeded in the packaged floating assistant. Quota transactions succeeded on those requests; quota exhaustion, restart and concurrency cases remain covered by local fixtures. Individual answer times are recorded in the changelog and are not guarantees.
 
 ## Existing resources
 
@@ -50,7 +50,7 @@ Expected startup responses are `{"status":"ok"}` and `{"ready":true}`. Readiness
 
 ## Public access decision
 
-The owner approved public invocation with the shared allowance on 13 October 2026. Cloud Run IAM still protects the existing deployment until the public deployment command is run. Without accounts or invite codes, **anyone who knows the reachable URL can consume the shared model allowance**, and traffic can incur hosting costs. Request limits reduce usage but are not authentication, private access or a monetary cap. No reusable admin credential belongs in the desktop app. Google documents the flag under [public Cloud Run access](https://docs.cloud.google.com/run/docs/authenticating/public).
+The owner approved and enabled public invocation with the shared allowance on 13 October 2026. Without accounts or invite codes, **anyone who knows the reachable URL can consume the shared model allowance**, and traffic can incur hosting costs. Request limits reduce usage but are not authentication, private access or a monetary cap. No reusable admin credential belongs in the desktop app. Google documents the flag under [public Cloud Run access](https://docs.cloud.google.com/run/docs/authenticating/public).
 
 ## API contract
 

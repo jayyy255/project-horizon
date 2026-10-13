@@ -1,17 +1,17 @@
 # Changes
 
-## 1.1.5 (hosted integration, pending live validation)
+## 1.1.5 (13 October 2026)
 
 - Standard builds ask Horizon's Cloud Run service directly for text, image and document answers. No Google sign-in, invite code or user API-key entry is needed. Provider credentials remain in Secret Manager; credential bundling is disabled.
 - Removed desktop OAuth sessions, sign-in controls, account IPC and backend OAuth exchange/refresh endpoints. The previously created OAuth cloud resources are untouched and no longer used by deployment.
 - All clients share durable Firestore limits: 10 model attempts/minute, 100/rolling 24 hours and two concurrent calls by default. Fallback attempts count separately; quota failures block inference. Model selection remains server-controlled.
 - Answers stream into the floating UI with timing stages. Cancellation aborts requests. Context retention, fresh chats after a completed answer, local indexed-project opening and supported local commands remain available. The hosted answer service has no desktop tools or action planner.
 - Consent explains transmission through Horizon's service to Google. Preferences explains direct hosted access and the shared allowance without account controls.
-- Public anonymous access with the shared quota was owner-approved on 13 October 2026. Deploy with `HORIZON_PUBLIC_ACCESS=1` to enable it; deployments without that flag remain private. Anyone with the reachable URL can use the shared allowance and generate hosting traffic. The permission change still needs execution in Cloud Shell.
+- Public anonymous access with the shared quota was owner-approved and deployed on 13 October 2026. Deploy with `HORIZON_PUBLIC_ACCESS=1` to retain it; deployments without that flag remain private. Anyone with the reachable URL can use the shared allowance and generate hosting traffic.
 
-The initial backend startup checks passed. The account-free update still needs redeployment and a real answer check before publishing this installer. Local fixtures do not establish live model availability or latency.
+The owner deployed revision `horizon-backend-00003-s82`, serving all traffic. Anonymous health/readiness checks passed at both service URLs, including the URL built into the app. A synthetic live text probe completed in 2.63 seconds. The actual packaged executable then answered generated text, image and PDF questions without a local key or account: observed submit-to-render times were 5.3, 7.1 and 3.9 seconds respectively. PDF attachment preparation took an additional 2.8 seconds, including Defender scanning and parsing. These are individual observations, not latency guarantees. No private desktop pixels or user documents were sent in testing.
 
-Local validation on 13 October 2026: 49 frontend, 33 desktop-command, 20 shortcut/rate-limit, 14 image, 13 attachment and 21 hosted-backend checks passed (150 total). The native UI passed 20 checks covering text, full-screen, crop, PDF and file answers with external requests blocked. The packaged executable passed 13 checks, including its bundled perception runtime, account-free preferences and local project opening. A packaged text scan covered 2,263 files without finding a known revoked key or Gemini/OAuth secret literal. Backend dependency audit reported zero known vulnerabilities. No live cloud answer or cloud latency is claimed.
+Local validation on 13 October 2026: 49 frontend, 33 desktop-command, 20 shortcut/rate-limit, 14 image, 13 attachment and 21 hosted-backend checks passed (150 total). The native UI passed 20 checks with external requests blocked. The packaged executable passed 13 offline checks and 17 checks in the live-answer run, including its bundled perception runtime, account-free preferences and local project opening. A packaged text scan covered 2,263 files without finding a known revoked key or Gemini/OAuth secret literal. Backend dependency audit reported zero known vulnerabilities.
 
 ## 1.1.4
 

@@ -4,7 +4,7 @@
 
 Horizon is a Windows desktop assistant for asking questions about your screen or documents, finding local projects, and opening them in VS Code. A global shortcut opens a small prompt over the app you are using. You can ask a text-only question, select part of the screen, attach the full display, or choose a PDF, image or text/code file. Answers stream into the floating assistant; the workspace keeps your chats and shows the execution trace for actions.
 
-The latest source version is **1.1.5** for Windows 10/11 (x64), with hosted answers and no account or invite-code setup. Its live backend validation is pending; the previous shared-key installers have been withdrawn. See the [changelog](CHANGELOG.md) for changes and validation.
+The latest source version is **1.1.5** for Windows 10/11 (x64), with hosted answers and no account or invite-code setup. Live text, image and PDF answers passed in the packaged app on 13 October 2026. The previous shared-key installers have been withdrawn. See the [changelog](CHANGELOG.md) for changes and validation.
 
 ## Install
 
@@ -12,7 +12,7 @@ The latest source version is **1.1.5** for Windows 10/11 (x64), with hosted answ
 
 A replacement installer has not been published yet. The standard `npm run package:win` build uses server-side credentials without sign-in; it includes no Gemini key or OAuth client secret.
 
-The [hosted Gemini backend](backend/gemini-service/README.md) has persistent shared usage limits. The owner deployed the initial service and confirmed its startup/configuration checks, then approved public access with the shared quota on 13 October 2026. The account-free update still needs redeployment with `HORIZON_PUBLIC_ACCESS=1` and a real answer test before desktop cloud access is ready.
+The [hosted Gemini backend](backend/gemini-service/README.md) is deployed with owner-approved public access and persistent shared usage limits. Ordinary users can ask directly without configuring Google Cloud. Owners maintaining their own backend should include `HORIZON_PUBLIC_ACCESS=1` on deployments to retain anonymous desktop access.
 
 To upgrade, **Quit Horizon from the system tray**, then run the new installer. Your saved shortcut and chats remain in your Windows user profile. You do not need to uninstall the previous version.
 
@@ -62,7 +62,7 @@ The visual PDF sample includes 0.35 s of local page rendering; most of its time 
 - The shortcut alone does not capture the screen. You choose when to attach context. Action requests may also inspect the screen as part of the requested task. When Gemini handles an attachment question, the prompt, recent conversation and selected image/document context are sent to Google. Text PDFs normally send extracted text; scanned PDFs and visual questions send locally rendered images of up to three relevant pages. Ask for **page 5**, for example, to inspect another page. The original stays local for follow-ups. Screen element detection runs on the device.
 - Chats, project indexes, and audit records are stored on your computer. Prompts and chosen context pass through the Horizon backend to Gemini; provider credentials stay on the server.
 - Scanned document copies and extracted context are retained locally for follow-ups. Executables, archives, Office documents/macros, binary text and active PDF content are blocked. Defender must be enabled with current definitions; scan failures block use. Explicit injection patterns are screened, and file/PDF questions have no desktop tools. Antivirus and injection defenses reduce risk; they cannot certify that every unknown threat is absent.
-- The withdrawn friends installers contained an extractable owner-provided Gemini credential, which has been revoked. A copy of that revoked credential remains in older Git history. Credential bundling is now disabled. The backend reserves one persistent shared quota: 10 model attempts/minute, 100/rolling 24 hours and two concurrent calls by default. Without sign-in, anyone who knows the publicly reachable backend URL can consume this allowance. Public access is owner-approved and still needs deployment. Fallback attempts count separately. These are usage limits, not a monetary cap.
+- The withdrawn friends installers contained an extractable owner-provided Gemini credential, which has been revoked. A copy of that revoked credential remains in older Git history. Credential bundling is now disabled. The backend reserves one persistent shared quota: 10 model attempts/minute, 100/rolling 24 hours and two concurrent calls by default. Without sign-in, anyone who knows the publicly reachable backend URL can consume this allowance. Public access is owner-approved and deployed. Fallback attempts count separately. These are usage limits, not a monetary cap.
 
 ## Troubleshooting
 
