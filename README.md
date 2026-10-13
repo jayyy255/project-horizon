@@ -12,7 +12,7 @@ The latest source version is **1.1.5** for Windows 10/11 (x64), with hosted answ
 
 A replacement installer has not been published yet. The standard `npm run package:win` build uses server-side credentials without sign-in; it includes no Gemini key or OAuth client secret.
 
-The [hosted Gemini backend](backend/gemini-service/README.md) has persistent shared usage limits. The owner deployed the initial service and confirmed its startup/configuration checks. The account-free update still needs redeployment, an owner-approved Cloud Run access change and a real answer test before desktop cloud access is ready.
+The [hosted Gemini backend](backend/gemini-service/README.md) has persistent shared usage limits. The owner deployed the initial service and confirmed its startup/configuration checks, then approved public access with the shared quota on 13 October 2026. The account-free update still needs redeployment with `HORIZON_PUBLIC_ACCESS=1` and a real answer test before desktop cloud access is ready.
 
 To upgrade, **Quit Horizon from the system tray**, then run the new installer. Your saved shortcut and chats remain in your Windows user profile. You do not need to uninstall the previous version.
 
@@ -62,14 +62,14 @@ The visual PDF sample includes 0.35 s of local page rendering; most of its time 
 - The shortcut alone does not capture the screen. You choose when to attach context. Action requests may also inspect the screen as part of the requested task. When Gemini handles an attachment question, the prompt, recent conversation and selected image/document context are sent to Google. Text PDFs normally send extracted text; scanned PDFs and visual questions send locally rendered images of up to three relevant pages. Ask for **page 5**, for example, to inspect another page. The original stays local for follow-ups. Screen element detection runs on the device.
 - Chats, project indexes, and audit records are stored on your computer. Prompts and chosen context pass through the Horizon backend to Gemini; provider credentials stay on the server.
 - Scanned document copies and extracted context are retained locally for follow-ups. Executables, archives, Office documents/macros, binary text and active PDF content are blocked. Defender must be enabled with current definitions; scan failures block use. Explicit injection patterns are screened, and file/PDF questions have no desktop tools. Antivirus and injection defenses reduce risk; they cannot certify that every unknown threat is absent.
-- The withdrawn friends installers contained an extractable owner-provided Gemini credential, which has been revoked. A copy of that revoked credential remains in older Git history. Credential bundling is now disabled. The backend reserves one persistent shared quota: 10 model attempts/minute, 100/rolling 24 hours and two concurrent calls by default. Without sign-in, anyone who knows the publicly reachable backend URL can consume this allowance. The current deployment remains private pending an explicit access decision. Fallback attempts count separately. These are usage limits, not a monetary cap.
+- The withdrawn friends installers contained an extractable owner-provided Gemini credential, which has been revoked. A copy of that revoked credential remains in older Git history. Credential bundling is now disabled. The backend reserves one persistent shared quota: 10 model attempts/minute, 100/rolling 24 hours and two concurrent calls by default. Without sign-in, anyone who knows the publicly reachable backend URL can consume this allowance. Public access is owner-approved and still needs deployment. Fallback attempts count separately. These are usage limits, not a monetary cap.
 
 ## Troubleshooting
 
 | Symptom | What to do |
 | --- | --- |
 | Shortcut does nothing | Check **Preferences → Hotkey Trigger** for **Active across Windows**. Select another shortcut or choose **Enable shortcut**. Confirm Horizon is running in the tray. |
-| The service is private or unavailable | The owner must redeploy the account-free backend and approve Cloud Run access. Readiness alone does not establish live Gemini or Firestore connectivity. |
+| The service is private or unavailable | Redeploy the account-free backend with the approved `HORIZON_PUBLIC_ACCESS=1` setting. Readiness alone does not establish live Gemini or Firestore connectivity. |
 | A follow-up opens an empty chat | After a completed answer, the shortcut intentionally starts a fresh chat. Type in the existing bar or reopen the earlier chat from history to continue. |
 | A question needs something outside the crop | Attach a new selection or the full screen. Horizon retains only the pixels you selected. |
 | A file is blocked | Check its type and size, and confirm Microsoft Defender is enabled with current definitions. Executables, archives, Office files and active PDFs are unsupported. Scanning failures also block attachments. |

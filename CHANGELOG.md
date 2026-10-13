@@ -7,7 +7,7 @@
 - All clients share durable Firestore limits: 10 model attempts/minute, 100/rolling 24 hours and two concurrent calls by default. Fallback attempts count separately; quota failures block inference. Model selection remains server-controlled.
 - Answers stream into the floating UI with timing stages. Cancellation aborts requests. Context retention, fresh chats after a completed answer, local indexed-project opening and supported local commands remain available. The hosted answer service has no desktop tools or action planner.
 - Consent explains transmission through Horizon's service to Google. Preferences explains direct hosted access and the shared allowance without account controls.
-- Deployment keeps Cloud Run private. Public anonymous access needs a separate owner decision; anyone with the reachable URL could use the shared allowance and generate hosting traffic.
+- Public anonymous access with the shared quota was owner-approved on 13 October 2026. Deploy with `HORIZON_PUBLIC_ACCESS=1` to enable it; deployments without that flag remain private. Anyone with the reachable URL can use the shared allowance and generate hosting traffic. The permission change still needs execution in Cloud Shell.
 
 The initial backend startup checks passed. The account-free update still needs redeployment and a real answer check before publishing this installer. Local fixtures do not establish live model availability or latency.
 

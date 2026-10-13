@@ -2,7 +2,7 @@
 
 This personal-project service streams text, image and document answers without Google sign-in or invite codes. The Gemini credential stays in Secret Manager and is injected into the Cloud Run runtime. No provider key or OAuth secret is included in the desktop installer or source upload. The backend owns model selection, output limits and a persistent shared usage allowance. It answers questions; it does not execute desktop tools or supply an action planner.
 
-**Deployment status:** the initial authenticated service is deployed, and the owner confirmed `/health` and `/ready`. The account-free source needs redeployment and a separate decision about public Cloud Run access, followed by a live answer test. Local fixtures do not establish live Gemini or Firestore availability. The deployment script preserves private access.
+**Deployment status:** the initial authenticated service is deployed, and the owner confirmed `/health` and `/ready`. The owner approved public access with the shared quota on 13 October 2026. The account-free source still needs redeployment with public access enabled, followed by a live answer test. Local fixtures do not establish live Gemini or Firestore availability. No cloud permissions have been changed by preparing this source.
 
 ## Existing resources
 
@@ -25,10 +25,10 @@ Use the existing checkout; no backend image needs to be selected. Cloud Run buil
 cd ~/project-horizon/backend/gemini-service
 git pull --ff-only
 cp cloud-run.env.example.yaml cloud-run.env.yaml
-HORIZON_SECRET_VERSION=1 bash deploy.sh
+HORIZON_SECRET_VERSION=1 HORIZON_PUBLIC_ACCESS=1 bash deploy.sh
 ```
 
-The settings copy replaces obsolete OAuth and per-account settings with shared limits. Adjust the secret version if necessary. Deployment uses 512 MiB memory, one CPU, concurrency four, zero minimum instances, two maximum instances and a 145-second timeout. `--invoker-iam-check --no-allow-unauthenticated` keeps the service private. This step alone does **not** enable desktop users to call it.
+The settings copy replaces obsolete OAuth and per-account settings with shared limits. Adjust the secret version if necessary. Deployment uses 512 MiB memory, one CPU, concurrency four, zero minimum instances, two maximum instances and a 145-second timeout. `HORIZON_PUBLIC_ACCESS=1` applies the owner's approved public-access choice using `--no-invoker-iam-check`. Omitting it (or setting it to `0`) deploys privately with `--invoker-iam-check --no-allow-unauthenticated`. Include the public setting on later deployments to keep ordinary desktop access working.
 
 For a new deployment, enable Cloud Run, Cloud Build, Artifact Registry, Secret Manager and Firestore APIs. The runtime account needs **Secret Manager Secret Accessor** on `gemini-horizon-key` and **Cloud Datastore User** on the backend project. A Firestore Native mode `(default)` database holds usage records; the desktop never accesses it. The source-build account needs **Cloud Run Builder**, separate from the runtime account. Existing resources do not need recreation. See Google's [source-deployment permissions](https://docs.cloud.google.com/run/docs/deploying-source-code), [secret bindings](https://docs.cloud.google.com/run/docs/configuring/services/secrets) and [Firestore permissions](https://docs.cloud.google.com/firestore/native/docs/security/iam).
 
@@ -50,7 +50,7 @@ Expected startup responses are `{"status":"ok"}` and `{"ready":true}`. Readiness
 
 ## Public access decision
 
-Cloud Run IAM still protects the deployed URL. Without accounts or invite codes, ordinary desktop use requires publicly reachable invocation. Enabling it is a separate owner-approved cloud permission change: **anyone who knows the URL can consume the shared model allowance**, and traffic can incur hosting costs. Request limits reduce usage but are not authentication, private access or a monetary cap. No reusable admin credential belongs in the desktop app. Public access has not been enabled by this source update. Google documents this separately under [public Cloud Run access](https://docs.cloud.google.com/run/docs/authenticating/public).
+The owner approved public invocation with the shared allowance on 13 October 2026. Cloud Run IAM still protects the existing deployment until the public deployment command is run. Without accounts or invite codes, **anyone who knows the reachable URL can consume the shared model allowance**, and traffic can incur hosting costs. Request limits reduce usage but are not authentication, private access or a monetary cap. No reusable admin credential belongs in the desktop app. Google documents the flag under [public Cloud Run access](https://docs.cloud.google.com/run/docs/authenticating/public).
 
 ## API contract
 

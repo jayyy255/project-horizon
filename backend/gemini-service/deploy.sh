@@ -5,6 +5,12 @@ project="project-c7d759e1-7d06-4978-bc0"
 account="horizon-backend@${project}.iam.gserviceaccount.com"
 region="${HORIZON_REGION:-asia-south1}"
 version="${HORIZON_SECRET_VERSION:-1}"
+public_access="${HORIZON_PUBLIC_ACCESS:-0}"
+case "$public_access" in
+  0) access_flags=(--invoker-iam-check --no-allow-unauthenticated) ;;
+  1) access_flags=(--no-invoker-iam-check) ;;
+  *) echo 'Set HORIZON_PUBLIC_ACCESS to 0 (private) or 1 (public shared quota).' >&2; exit 1 ;;
+esac
 if [[ ! "$version" =~ ^[1-9][0-9]*$ ]]; then
   echo 'Set HORIZON_SECRET_VERSION to a numbered secret version.' >&2; exit 1
 fi
@@ -25,4 +31,4 @@ gcloud run deploy horizon-backend \
   --env-vars-file cloud-run.env.yaml \
   --memory 512Mi --cpu 1 --concurrency 4 \
   --min-instances 0 --max-instances 2 --timeout 145 \
-  --invoker-iam-check --no-allow-unauthenticated
+  "${access_flags[@]}"
