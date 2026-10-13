@@ -1,13 +1,9 @@
-// Native hosted workflow with synthetic sessions and answers; no cloud calls.
-const { app, BrowserWindow, desktopCapturer, globalShortcut, dialog, safeStorage } = require('electron');
+// Native hosted workflow with synthetic answers; no cloud calls.
+const { app, BrowserWindow, desktopCapturer, globalShortcut, dialog } = require('electron');
 const fs = require('node:fs'), path = require('node:path');
 app.disableHardwareAcceleration();
 app.setPath('userData', path.resolve('scratch/context-ui-' + Date.now()));
-const out = path.resolve('docs/verification/hosted-2026-10-12', process.env.HORIZON_TEST_PACKAGE_ROOT ? 'packaged' : '.'); fs.mkdirSync(out, { recursive: true });
-app.whenReady().then(() => {
-  fs.mkdirSync(app.getPath('userData'), { recursive: true });
-  fs.writeFileSync(path.join(app.getPath('userData'), 'horizon-account.enc'), safeStorage.encryptString(JSON.stringify({ idToken: 'synthetic.id.token', refreshToken: 'synthetic-refresh', expiresAt: Date.now() + 3600000, email: 'approved@example.test', subject: 'synthetic-subject' })));
-});
+const out = path.resolve('docs/verification/personal-2026-10-13', process.env.HORIZON_TEST_PACKAGE_ROOT ? 'packaged' : '.'); fs.mkdirSync(out, { recursive: true });
 const report = { checks: [], fixtures: [], errors: [] }, callbacks = new Map();
 const register = globalShortcut.register.bind(globalShortcut);
 globalShortcut.register = (key, callback) => { callbacks.set(key, callback); return register(key, callback); };
@@ -17,7 +13,7 @@ global.fetch = async (url, options) => {
     if (!/^http:\/\/127\.0\.0\.1(?::\d+)?\//.test(String(url))) throw Error('External requests are disabled in the hosted UI test');
     return realFetch(url, options);
   }
-  if (options.headers.Authorization !== 'Bearer synthetic.id.token' || options.headers['x-goog-api-key']) throw Error('Hosted authentication was not used');
+  if (options.headers.Authorization || options.headers['x-goog-api-key']) throw Error('Unexpected client credential');
   const text = 'The launch date is October 20. The budget is 420 dollars.';
   return new Response([{ type: 'delta', text }, { type: 'done', text }].map(event => 'data: ' + JSON.stringify(event) + '\n\n').join(''), { headers: { 'content-type': 'text/event-stream' } });
 };
@@ -38,7 +34,7 @@ app.whenReady().then(async () => {
   try {
     const main = await until(async () => BrowserWindow.getAllWindows().find(win => /index.html$/.test(win.webContents.getURL())));
     const account = await run(main, 'window.horizonAPI.getGeminiStatus()');
-    check('Hosted account status contains no credentials', account.hosted && account.configured && !('idToken' in account) && !('refreshToken' in account));
+    check('Fresh hosted profile needs no account and exposes no credentials', account.hosted && account.configured && !('idToken' in account) && !('refreshToken' in account));
     await until(() => run(main, 'Boolean(document.querySelector(".consent-secondary"))'));
     await run(main, 'document.querySelector(".consent-secondary").click()');
     await run(main, 'window.horizonAPI.approveHotkey()');
@@ -74,7 +70,7 @@ app.whenReady().then(async () => {
     await run(bar, 'document.querySelector(".timing-details").open=true'); await shot(bar, 'pdf-answer-dark');
     await run(main, 'document.querySelector("[aria-label=\\\"Toggle Light / Dark Mode\\\"]").click()'); await until(() => run(bar, 'document.documentElement.classList.contains("light-mode")')); await shot(bar, 'pdf-answer-light');
     // Prepared image/document samples also stay mocked.
-    for (const kind of ['fullscreen','crop','pdf','file']) {
+    for (const kind of ['text','fullscreen','crop','pdf','file']) {
       await reset();
       if (kind === 'fullscreen') { await run(bar, 'document.querySelector("[aria-label=\\\"Full Screen\\\"]").click()'); await until(() => run(bar, 'Boolean(document.querySelector("img[alt=\\\"Crop preview\\\"]"))')); }
       else if (kind === 'crop') {
@@ -86,7 +82,7 @@ app.whenReady().then(async () => {
         await run(overlay, 'document.querySelector(".capture-canvas").dispatchEvent(new MouseEvent("mouseup",{bubbles:true,button:0}))');
         await until(() => run(overlay, '!document.querySelector(".capture-primary").disabled')); await run(overlay, 'document.querySelector(".capture-primary").click()');
         await until(() => run(bar, 'Boolean(document.querySelector("img[alt=\\\"Crop preview\\\"]"))'));
-      } else {
+      } else if (kind !== 'text') {
         const file = kind === 'pdf' ? docFile : path.join(app.getPath('userData'), 'plan.txt'); if (kind === 'file') fs.writeFileSync(file, 'Launch date October 20. Budget 420 dollars.');
         dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] });
         await run(bar, 'document.querySelector("[aria-label=\\\"Attach file\\\"]").click()'); await until(() => run(bar, `document.body.textContent.includes('plan.${kind === 'pdf' ? 'pdf' : 'txt'}')`));
@@ -103,12 +99,10 @@ app.whenReady().then(async () => {
     await run(main, 'document.querySelector("[aria-label=Preferences]").click()');
     await until(() => run(main, 'Boolean([...document.querySelectorAll("button")].find(button=>button.textContent==="Inference Engine"))'));
     await run(main, '[...document.querySelectorAll("button")].find(button=>button.textContent==="Inference Engine").click()');
-    await until(() => run(main, 'document.body.textContent.includes("Signed in as approved@example.test.")'));
-    check('Native preferences use the Horizon account without an API-key form', await run(main, '!document.querySelector("#gemini-api-key")'));
-    await shot(main, 'account-dark');
-    await run(main, 'window.horizonAPI.signOut()');
-    await until(() => run(main, 'document.body.textContent.includes("Sign in with Google")'));
-    check('Sign-out removes the encrypted session and updates preferences', !fs.existsSync(path.join(app.getPath('userData'), 'horizon-account.enc')));
+    await until(() => run(main, 'document.body.textContent.includes("Horizon answers")'));
+    check('Native preferences require no account or API-key form', await run(main, '!document.querySelector("#gemini-api-key")&&!document.body.textContent.includes("Sign in with Google")'));
+    await shot(main, 'preferences-light');
+    check('No account session is created in the fresh profile', !fs.existsSync(path.join(app.getPath('userData'), 'horizon-account.enc')));
     check('Native UI produced no renderer errors', report.errors.length === 0, report.errors);
     report.passed = true;
   } catch (error) { report.passed = false; report.error = error.stack; console.error(error.message); }

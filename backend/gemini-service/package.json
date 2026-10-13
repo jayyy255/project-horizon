@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Authenticated, metered Gemini streaming backend for Horizon",
+  "description": "Shared-quota Gemini streaming backend for personal Horizon use",
   "engines": {
     "node": ">=22.13.0"
   },
@@ -12,7 +12,6 @@
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
-    "@google-cloud/firestore": "9.3.1",
-    "google-auth-library": "11.2.0"
+    "@google-cloud/firestore": "9.3.1"
   }
 }

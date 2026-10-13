@@ -1,15 +1,12 @@
-import { cloudAccount } from '../cloud';
+import { HORIZON_BACKEND_URL } from '../../shared/cloud';
 import { LatencyTrace } from '../latency';
 export async function hostedAnswer(question: { prompt: string; parts: unknown[]; history?: Array<{ role: 'user' | 'assistant'; text: string }> }, trace?: LatencyTrace, onPartial?: (text: string) => void, signal?: AbortSignal) {
-  const account = cloudAccount(), tokenAt = performance.now();
-  const token = await account.token();
-  trace?.add('account_session', performance.now() - tokenAt);
   const started = performance.now();
-  const response = await fetch(`${account.backendURL}/v1/answer`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ ...question, history: question.history?.slice(-10).map(item => ({ role: item.role, text: item.text.slice(0, 4000) })) || [] }), signal: AbortSignal.any([AbortSignal.timeout(145000), ...(signal ? [signal] : [])]) });
+  const response = await fetch(`${HORIZON_BACKEND_URL}/v1/answer`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...question, history: question.history?.slice(-10).map(item => ({ role: item.role, text: item.text.slice(0, 4000) })) || [] }), signal: AbortSignal.any([AbortSignal.timeout(145000), ...(signal ? [signal] : [])]) });
   trace?.add('hosted_response_headers', performance.now() - started, response.ok ? 'ok' : 'error');
   if (!response.ok) {
     await response.body?.cancel();
-    if ([401,403].includes(response.status)) throw new Error('Horizon access was refused. Sign in with an approved Google account, or ask the app owner to check backend access.');
+    if ([401,403].includes(response.status)) throw new Error('Horizon’s service is still private. Its owner needs to finish the Cloud Run access setup.');
     if (response.status === 429) throw new Error('Horizon usage limit reached. Try again later.');
     if (response.status === 413) throw new Error('Attachment upload exceeds the service limit. Choose fewer items.');
     throw new Error('Horizon could not answer right now. Try again shortly.');

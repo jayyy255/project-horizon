@@ -1,7 +1,7 @@
 import { app, safeStorage } from 'electron';
 import fs from 'fs';
 import path from 'path';
-import { cloudAccount, useHostedService } from './cloud';
+import { useHostedService } from './cloud';
 
 const keyPath = () => path.join(app.getPath('userData'), 'gemini-api-key.enc');
 export function loadGeminiKey(): void {
@@ -12,13 +12,13 @@ export function loadGeminiKey(): void {
 }
 
 export function getGeminiStatus() {
-  if (useHostedService()) { const status = cloudAccount().status(); return { ...status, configured: status.signedIn, ownerProvided: false }; }
+  if (useHostedService()) return { hosted: true, configured: true, ownerProvided: false };
   return { configured: Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'your_gemini_api_key_here'),
     ownerProvided: false };
 }
 
 export function saveGeminiKey(value: string) {
-  if (useHostedService()) throw new Error('Use Google sign-in for Horizon access. API keys are managed by the backend.');
+  if (useHostedService()) throw new Error('API keys are managed by Horizon’s backend.');
   const key = value.trim();
   if (!key) {
     fs.rmSync(keyPath(), { force: true });

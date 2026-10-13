@@ -11,13 +11,13 @@ export function modelBody(question, model) {
   return body;
 }
 
-export async function streamAnswer({ question, subject, config, quota, signal, emit, request = fetch }) {
+export async function streamAnswer({ question, config, quota, signal, emit, request = fetch }) {
   let text = '', first = true, upstreamCalls = 0;
   const started = performance.now();
   for (const [attempt, model] of config.models.entries()) {
     const body = modelBody(question, model);
     if (signal.aborted) throw new ServiceError(499, 'cancelled', 'Request cancelled.');
-    const release = await quota.reserve(subject);
+    const release = await quota.reserve();
     const attemptAt = performance.now();
     const timeout = AbortSignal.timeout(config.requestTimeoutMs);
     const combinedSignal = AbortSignal.any([signal, timeout]);

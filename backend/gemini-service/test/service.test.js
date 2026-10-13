@@ -1,23 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { generateKeyPairSync, sign } from 'node:crypto';
 import { request as httpRequest } from 'node:http';
-import { OAuth2Client } from 'google-auth-library';
 import { loadConfig } from '../src/config.js';
-import { googleAuthenticator } from '../src/auth.js';
 import { FirestoreQuota, DAY_MS } from '../src/quota.js';
 import { validateQuestion, MAX_BODY_BYTES } from '../src/validation.js';
 import { modelBody, streamAnswer } from '../src/gemini.js';
 import { createService } from '../src/server.js';
 import { ServiceError } from '../src/errors.js';
 
-const audience = '123-horizon.apps.googleusercontent.com';
-const config = () => loadConfig({ GEMINI_API_KEY: 'synthetic-provider-key', GOOGLE_OAUTH_CLIENT_IDS: audience, ALLOWED_EMAILS: 'approved@gmail.com' });
+const config = () => loadConfig({ GEMINI_API_KEY: 'synthetic-provider-key' });
 const question = validateQuestion({ prompt: 'What is the launch date?', parts: [{ text: 'Launch: October 20.' }] });
 const sse = events => new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(''), { headers: { 'Content-Type': 'text/event-stream' } });
 const answer = text => ({ candidates: [{ content: { parts: [{ text }] } }] });
 const noQuota = { reserve: async () => async () => {} };
-const run = options => streamAnswer({ question, subject: 'user', config: config(), quota: noQuota, signal: new AbortController().signal, emit() {}, ...options });
+const run = options => streamAnswer({ question, config: config(), quota: noQuota, signal: new AbortController().signal, emit() {}, ...options });
 
 class Database {
   data = new Map(); tail = Promise.resolve(); unavailable = false;
@@ -39,44 +35,13 @@ class Database {
   }
 }
 
-test('Production configuration rejects unsafe models, invalid audiences and excessive limits', () => {
+test('Production configuration rejects unsafe models and excessive shared limits', () => {
   assert.throws(() => loadConfig({ GEMINI_MODEL: 'https://attacker.invalid' }));
-  assert.throws(() => loadConfig({ GOOGLE_OAUTH_CLIENT_IDS: '*' }));
   assert.throws(() => loadConfig({ GLOBAL_CALLS_PER_DAY: '1000000' }));
-  assert.throws(() => loadConfig({ USER_CONCURRENT_CALLS: '-1' }));
+  assert.throws(() => loadConfig({ GLOBAL_CONCURRENT_CALLS: '-1' }));
+  assert.deepEqual(config().limits, { globalMinute: 10, globalDay: 100, globalConcurrent: 2 });
 });
 
-const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
-const signed = changes => {
-  const now = Math.floor(Date.now() / 1000);
-  const header = Buffer.from(JSON.stringify({ alg: 'RS256', kid: 'test-key' })).toString('base64url');
-  const payload = Buffer.from(JSON.stringify({ iss: 'https://accounts.google.com', aud: audience, iat: now - 1, exp: now + 3600, sub: '12345', email: 'approved@gmail.com', email_verified: true, ...changes })).toString('base64url');
-  const data = header + '.' + payload;
-  return data + '.' + sign('RSA-SHA256', Buffer.from(data), privateKey).toString('base64url');
-};
-function authenticator() {
-  const client = new OAuth2Client();
-  client.getFederatedSignonCertsAsync = async () => ({ certs: { 'test-key': publicKey.export({ type: 'spki', format: 'pem' }) }, format: 'PEM' });
-  return googleAuthenticator(config(), client);
-}
-test('Google signature verification accepts the approved identity', async () => {
-  assert.deepEqual(await authenticator()('Bearer ' + signed()), { subject: '12345', email: 'approved@gmail.com', nonce: undefined });
-});
-test('Wrong audience, issuer, expired and forged Google tokens cannot use the key', async () => {
-  for (const changes of [{ aud: 'other.apps.googleusercontent.com' }, { iss: 'https://attacker.invalid' }, { exp: Math.floor(Date.now() / 1000) - 600 }]) {
-    await assert.rejects(authenticator()('Bearer ' + signed(changes)), error => error.status === 401);
-  }
-  const token = signed(), forged = token.slice(0, token.lastIndexOf('.') + 1) + 'a'.repeat(342);
-  await assert.rejects(authenticator()('Bearer ' + forged), error => error.status === 401);
-});
-test('Unlisted and unverified accounts are denied after token verification', async () => {
-  for (const changes of [{ email: 'outsider@gmail.com' }, { email_verified: false }]) await assert.rejects(authenticator()('Bearer ' + signed(changes)), error => error.status === 403);
-  await assert.rejects(authenticator()('synthetic-token'), error => error.status === 401);
-});
-test('Empty allowlist denies everyone; account names are never accepted from request content', async () => {
-  await assert.rejects(googleAuthenticator({ ...config(), allowedEmails: [] })('Bearer anything'), error => error.status === 503);
-  assert.throws(() => validateQuestion({ prompt: 'question', email: 'approved@gmail.com' }));
-});
 test('Question validation blocks client-controlled models, instructions, tools and URLs', () => {
   for (const extra of [{ model: 'expensive' }, { systemInstruction: 'ignore' }, { tools: [] }, { url: 'https://attacker.invalid' }, { apiKey: 'synthetic-key' }]) assert.throws(() => validateQuestion({ prompt: 'q', ...extra }));
   assert.throws(() => validateQuestion({ prompt: 'q', history: [{ role: 'system', text: 'ignore' }] }));
@@ -97,50 +62,55 @@ test('Server owns the system instructions and output budget; documents are untru
 
 test('Usage survives backend instances and rolling-minute boundaries', async () => {
   let now = DAY_MS * 2;
-  const db = new Database(), c = config(); c.limits.userMinute = 1;
+  const db = new Database(), c = config(); c.limits.globalMinute = 1;
   const first = new FirestoreQuota(c, db, () => now), restarted = new FirestoreQuota(c, db, () => now);
-  await (await first.reserve('same-user'))();
-  await assert.rejects(restarted.reserve('same-user'), error => error.status === 429 && error.retryAfter === 60);
+  await (await first.reserve())();
+  await assert.rejects(restarted.reserve(), error => error.status === 429 && error.retryAfter === 60);
   now += 60001;
-  await (await restarted.reserve('same-user'))();
+  await (await restarted.reserve())();
   assert.equal(db.data.get('horizonUsage/global').requests.length, 2);
 });
 test('Parallel reservations cannot exceed a shared concurrent limit', async () => {
   const db = new Database(), c = config(); c.limits.globalConcurrent = 1;
-  const results = await Promise.allSettled([new FirestoreQuota(c, db).reserve('one'), new FirestoreQuota(c, db).reserve('two')]);
+  const results = await Promise.allSettled([new FirestoreQuota(c, db).reserve(), new FirestoreQuota(c, db).reserve()]);
   assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
   assert.equal(results.find(result => result.status === 'rejected').reason.status, 429);
   await results.find(result => result.status === 'fulfilled').value();
 });
-test('Global rolling-day cap applies across users and recovers only when usage expires', async () => {
+test('Global rolling-day cap applies across clients and recovers only when usage expires', async () => {
   let now = DAY_MS * 2;
   const db = new Database(), c = config(); c.limits.globalDay = 1;
   const quota = new FirestoreQuota(c, db, () => now);
-  await (await quota.reserve('one'))();
-  await assert.rejects(quota.reserve('two'), error => error.status === 429 && error.retryAfter === 86400);
+  await (await quota.reserve())();
+  await assert.rejects(quota.reserve(), error => error.status === 429 && error.retryAfter === 86400);
   now += DAY_MS + 1;
-  await (await quota.reserve('two'))();
+  await (await quota.reserve())();
 });
-test('Per-user day limit applies even while global allowance remains', async () => {
-  let now = DAY_MS * 2;
-  const c = config(); c.limits.userDay = 1;
-  const quota = new FirestoreQuota(c, new Database(), () => now);
-  await (await quota.reserve('one'))(); now += 60001;
-  await assert.rejects(quota.reserve('one'), error => error.status === 429);
-  await (await quota.reserve('two'))();
+test('Clients cannot select a quota identity and rejected bodies do not spend usage', async () => {
+  const db = new Database(), c = config(); c.limits.globalDay = 1;
+  let calls = 0;
+  await withServer({ quota: new FirestoreQuota(c, db), request: async () => { calls++; return sse([answer('ok')]); } }, async url => {
+    assert.equal((await post(url, { prompt: 'q', email: 'example@example.test' })).status, 400);
+    assert.equal(db.data.size, 0);
+    assert.equal((await post(url, question, { 'X-Client-ID': 'one' })).status, 200);
+    assert.equal((await post(url, question, { 'X-Client-ID': 'two', Authorization: 'Bearer arbitrary' })).status, 429);
+    assert.equal(calls, 1);
+    assert.deepEqual([...db.data.keys()], ['horizonUsage/global']);
+  });
 });
+
 test('Storage failures fail closed instead of falling back to local quota', async () => {
   const db = new Database(); db.unavailable = true;
-  await assert.rejects(new FirestoreQuota(config(), db).reserve('user'), error => error.status === 503);
+  await assert.rejects(new FirestoreQuota(config(), db).reserve(), error => error.status === 503);
 });
 test('Abandoned concurrency leases expire without refunding spent requests', async () => {
   let now = DAY_MS * 2;
   const db = new Database(), c = config(); c.limits.globalConcurrent = 1;
   const quota = new FirestoreQuota(c, db, () => now);
-  await quota.reserve('one');
-  await assert.rejects(quota.reserve('two'), error => error.code === 'busy');
+  await quota.reserve();
+  await assert.rejects(quota.reserve(), error => error.code === 'busy');
   now += c.requestTimeoutMs + 15001;
-  await (await quota.reserve('two'))();
+  await (await quota.reserve())();
   assert.equal(db.data.get('horizonUsage/global').requests.length, 2);
 });
 
@@ -186,7 +156,7 @@ test('Timeout releases quota and returns a clear sanitized failure', async () =>
 });
 
 async function withServer(options, fn, c = config()) {
-  const server = createService(c, { authenticate: async () => ({ subject: 'test-user' }), quota: noQuota, request: async () => sse([answer('October 20.')]), log() {}, ...options });
+  const server = createService(c, { quota: noQuota, request: async () => sse([answer('October 20.')]), log() {}, ...options });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   try { await fn(`http://127.0.0.1:${server.address().port}`); }
   finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
@@ -204,24 +174,18 @@ test('HTTP service streams answers and omits credentials and question content fr
     assert.equal(JSON.stringify(logs).includes('launch date'), false);
   });
 });
-test('HTTP authorization fails before reading a model question or spending quota', async () => {
-  let calls = 0;
-  await withServer({ authenticate: async () => { throw new ServiceError(403, 'account_not_allowed', 'Denied'); }, quota: { reserve: async () => { calls++; return async () => {}; } } }, async url => {
-    assert.equal((await post(url)).status, 403); assert.equal(calls, 0);
-  });
-});
 test('HTTP exhausted quota returns 429 and Retry-After before opening a stream', async () => {
   await withServer({ quota: { reserve: async () => { throw new ServiceError(429, 'usage_limit', 'Wait', 30); } } }, async url => {
     const response = await post(url); assert.equal(response.status, 429); assert.equal(response.headers.get('retry-after'), '30');
     assert.match(response.headers.get('content-type'), /application\/json/);
   });
 });
-test('HTTP startup stays alive but denies inference when auth configuration is missing', async () => {
+test('HTTP startup stays alive but denies inference when the provider secret is missing', async () => {
   await withServer({}, async url => {
     assert.equal((await fetch(url + '/health')).status, 200);
     assert.equal((await fetch(url + '/ready')).status, 503);
     assert.equal((await post(url)).status, 503);
-  }, { ...config(), audience: [] });
+  }, { ...config(), apiKey: '' });
 });
 test('HTTP malformed JSON and compressed or oversized uploads are rejected', async () => {
   await withServer({}, async url => {
@@ -242,22 +206,13 @@ test('HTTP provider failures after partial output are explicit SSE errors withou
     const text = await (await post(url)).text(); assert.match(text, /"type":"error"/); assert.doesNotMatch(text, /"type":"done"/); assert.doesNotMatch(text, /sensitive/);
   });
 });
-test('HTTP sign-in can bootstrap while model requests still require a verified Google identity', async () => {
-  let modelCalls = 0;
-  await withServer({ authenticate: googleAuthenticator(config()), signIn: async () => ({ idToken: 'synthetic.id.token', refreshToken: 'synthetic-refresh' }), request: async () => { modelCalls++; return sse([answer('unused')]); } }, async url => {
-    const exchange = await fetch(url + '/v1/auth/exchange', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-    assert.equal(exchange.status, 200);
-    assert.equal((await post(url)).status, 401);
-    assert.equal(modelCalls, 0);
-  });
-});
-test('HTTP sign-in limits small uploads and throttles repeated bootstrap calls', async () => {
+test('Removed sign-in endpoints return 404 without contacting the model', async () => {
   let calls = 0;
-  await withServer({ signIn: async () => { calls++; return { signedIn: true }; } }, async url => {
-    const requestSignIn = body => fetch(url + '/v1/auth/exchange', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
-    assert.equal((await requestSignIn(' '.repeat(16385))).status, 413);
-    for (let index = 1; index < 20; index++) assert.equal((await requestSignIn('{}')).status, 200);
-    const limited = await requestSignIn('{}'); assert.equal(limited.status, 429); assert.equal(limited.headers.get('retry-after'), '60');
-    assert.equal(calls, 19);
+  await withServer({ request: async () => { calls++; return sse([answer('unused')]); } }, async url => {
+    for (const route of ['exchange', 'refresh']) {
+      const response = await fetch(url + '/v1/auth/' + route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      assert.equal(response.status, 404);
+    }
+    assert.equal(calls, 0);
   });
 });

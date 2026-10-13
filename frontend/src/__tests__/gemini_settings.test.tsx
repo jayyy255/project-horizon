@@ -4,26 +4,22 @@ import { SettingsPreferencesSuite } from '../components/SettingsPreferencesSuite
 
 afterEach(() => { delete window.horizonAPI; });
 describe('Installer Gemini setup', () => {
-  it('uses Google sign-in for hosted access and exposes no API-key input', async () => {
-    const signIn = vi.fn().mockResolvedValue({ configured: true, signedIn: true, hosted: true, email: 'approved@example.test' });
-    const signOut = vi.fn().mockResolvedValue({ configured: false, signedIn: false, hosted: true });
-    window.horizonAPI = { getGeminiStatus: vi.fn().mockResolvedValue({ configured: false, hosted: true }), signIn, signOut } as any;
+  it('offers hosted answers without an account or API-key input', async () => {
+    window.horizonAPI = { getGeminiStatus: vi.fn().mockResolvedValue({ configured: true, hosted: true }) } as any;
     render(<SettingsPreferencesSuite isDarkMode />); fireEvent.click(screen.getByRole('button', { name: 'Inference Engine' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Horizon answers')).toBeDefined());
+    expect(screen.getByText(/No account or API-key setup is needed/)).toBeDefined();
     expect(screen.queryByLabelText('Gemini API key')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
-    await waitFor(() => expect(screen.getByText('Signed in as approved@example.test.')).toBeDefined());
-    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
-    await waitFor(() => expect(signOut).toHaveBeenCalled());
-    expect(JSON.stringify(localStorage)).not.toContain('approved@example.test');
+    expect(screen.queryByRole('button', { name: /Sign in|Sign out/ })).toBeNull();
+    expect(screen.getByText(/usage allowance/)).toBeDefined();
   });
-  it('keeps hosted access signed out after a failed Google login', async () => {
-    window.horizonAPI = { getGeminiStatus: vi.fn().mockResolvedValue({ configured: false, hosted: true }), signIn: vi.fn().mockRejectedValue(new Error('Account not approved')) } as any;
+  it('does not claim a live connection based on endpoint configuration', async () => {
+    window.horizonAPI = { getGeminiStatus: vi.fn().mockResolvedValue({ configured: false, hosted: true }) } as any;
     render(<SettingsPreferencesSuite isDarkMode />); fireEvent.click(screen.getByRole('button', { name: 'Inference Engine' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeDefined());
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
-    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Account not approved'));
-    expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull();
+    await waitFor(() => expect(screen.getByText('Horizon answers')).toBeDefined());
+    expect(screen.queryByText('Connected')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Sign in|Sign out/ })).toBeNull();
+    expect(screen.queryByLabelText('Gemini API key')).toBeNull();
   });
   it('does not ask friends for a key when owner access is included', async () => {
     window.horizonAPI = { getGeminiStatus: vi.fn().mockResolvedValue({configured:true,ownerProvided:true}) } as any;

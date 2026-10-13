@@ -15,7 +15,7 @@ import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 import { AgentHost } from './agent';
-import { cloudAccount, useHostedService } from './cloud';
+import { useHostedService } from './cloud';
 import { runPackagedVerification } from './packagedVerification';
 import { loadGeminiKey, getGeminiStatus, saveGeminiKey } from './settings';
 import { HotkeyManager } from './hotkeys';
@@ -541,9 +541,6 @@ app.whenReady().then(async () => {
   loadGeminiKey();
   ipcMain.handle('horizon:get-gemini-status', () => getGeminiStatus());
   ipcMain.handle('horizon:save-gemini-key', (_event, key: string) => saveGeminiKey(key));
-  ipcMain.handle('horizon:sign-in', async () => { await cloudAccount().signIn(); return getGeminiStatus(); });
-  ipcMain.handle('horizon:cancel-sign-in', () => cloudAccount().cancelSignIn());
-  ipcMain.handle('horizon:sign-out', () => { cloudAccount().signOut(); return getGeminiStatus(); });
   const isVerifyMode = process.argv.includes('--verify-packaged') || process.env.VERIFY_PACKAGED === '1';
   if (isVerifyMode) {
     await runPackagedVerification();

@@ -23,14 +23,6 @@ contextBridge.exposeInMainWorld('horizonAPI', {
     return () => ipcRenderer.removeListener('horizon:floating-new-chat', handler);
   },
   getGeminiStatus: () => ipcRenderer.invoke('horizon:get-gemini-status'),
-  signIn: () => ipcRenderer.invoke('horizon:sign-in'),
-  cancelSignIn: () => ipcRenderer.invoke('horizon:cancel-sign-in'),
-  signOut: () => ipcRenderer.invoke('horizon:sign-out'),
-  onAccountStatus: (callback: (status: unknown) => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status);
-    ipcRenderer.on('horizon:account-status', handler);
-    return () => ipcRenderer.removeListener('horizon:account-status', handler);
-  },
   saveGeminiKey: (key: string) => ipcRenderer.invoke('horizon:save-gemini-key', key),
   getWorkspaceRoots: () => ipcRenderer.invoke('horizon:get-workspace-roots'),
   addWorkspaceRoot: () => ipcRenderer.invoke('horizon:add-workspace-root'),

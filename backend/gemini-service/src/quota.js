@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { Firestore } from '@google-cloud/firestore';
 import { ServiceError } from './errors.js';
 
@@ -21,19 +21,17 @@ export class FirestoreQuota {
   constructor(config, db = new Firestore({ projectId: config.projectId }), now = Date.now) {
     this.db = db; this.config = config; this.now = now;
   }
-  refs(subject) {
-    const id = createHash('sha256').update(subject).digest('hex');
-    return [this.db.collection('horizonUsage').doc('global'), this.db.collection('horizonUsage').doc('user-' + id)];
+  refs() {
+    return [this.db.collection('horizonUsage').doc('global')];
   }
-  async reserve(subject) {
-    const refs = this.refs(subject), lease = randomUUID();
+  async reserve() {
+    const refs = this.refs(), lease = randomUUID();
     try {
       await this.db.runTransaction(async transaction => {
         const snapshots = await transaction.getAll(...refs);
         const now = this.now(), limits = this.config.limits;
         const values = snapshots.map(snapshot => state(snapshot.exists ? snapshot.data() : undefined, now));
         checkUsage(values[0], now, limits.globalMinute, limits.globalDay, limits.globalConcurrent);
-        checkUsage(values[1], now, limits.userMinute, limits.userDay, limits.userConcurrent);
         for (const [index, value] of values.entries()) {
           value.requests.push(now);
           value.active.push({ id: lease, until: now + this.config.requestTimeoutMs + 15000 });

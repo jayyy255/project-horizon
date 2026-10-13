@@ -63,7 +63,8 @@ async function renderer(expression) {
     const identity = await evaluate(`({packaged:process.mainModule.require('electron').app.isPackaged,version:process.mainModule.require('electron').app.getVersion(),userdata:process.mainModule.require('electron').app.getPath('userData')})`);
     check('Actual packaged executable launches', identity.packaged && identity.version===version, identity);
     check('Verification uses an isolated profile', identity.userdata.toLowerCase().startsWith(profile.toLowerCase()+path.sep));
-    check('Fresh install has no bundled Gemini credential', !(await renderer('window.horizonAPI.getGeminiStatus()')).configured);
+    const service = await renderer('window.horizonAPI.getGeminiStatus()');
+    check('Fresh install uses the hosted endpoint without account credentials', service.hosted && service.configured && !service.ownerProvided && !service.idToken && !service.apiKey);
     await evaluate(`process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>/index.html$/.test(w.webContents.getURL())).webContents.on('console-message', (_e,level,message)=>{if(level===3)globalThis.__horizonSmokeErrors=(globalThis.__horizonSmokeErrors||[]).concat(message);})`);
     const ui = await renderer(`document.fonts.ready.then(()=>({font:[...document.fonts].some(f=>f.family.includes('JetBrains Mono')&&f.status==='loaded'),icon:document.querySelector('.brand-mark img').naturalWidth,consent:Boolean(document.querySelector('.consent-dialog')),noReadyBadge:!document.querySelector('.connection-pill')}))`);
     check('Packaged UI, consent, font and app icon load', ui.font && ui.icon===512 && ui.consent && ui.noReadyBadge, ui);
@@ -71,8 +72,8 @@ async function renderer(expression) {
     await renderer(`document.querySelector('.consent-secondary').click();document.querySelector('[aria-label="Preferences"]').click();`);
     await until(()=>renderer(`Boolean([...document.querySelectorAll('button')].find(b=>b.textContent==='Inference Engine'))`));
     await renderer(`[...document.querySelectorAll('button')].find(b=>b.textContent==='Inference Engine').click()`);
-    await until(()=>renderer(`document.body.textContent.includes('Sign in with Google')`));
-    check('Hosted installer offers Google sign-in without a key field', await renderer(`!document.querySelector('#gemini-api-key')`));
+    await until(()=>renderer(`document.body.textContent.includes('Horizon answers')`));
+    check('Hosted installer needs no sign-in or API-key field', await renderer(`!document.querySelector('#gemini-api-key')&&!document.body.textContent.includes('Sign in with Google')`));
     fs.writeFileSync(path.join(profile,'preferences.png'), Buffer.from(await evaluate(`process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>/index.html$/.test(w.webContents.getURL())).webContents.capturePage().then(image=>image.toPNG().toString('base64'))`),'base64'));
     const prompt='open my code security reviewer project in vs code';
     // Keep the editor's normal profile while Horizon retains its cached,

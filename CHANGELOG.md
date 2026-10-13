@@ -2,16 +2,16 @@
 
 ## 1.1.5 (hosted integration, pending live validation)
 
-- Standard builds use Google sign-in and the Horizon Cloud Run service for text, image and document questions. No user API-key entry is required for hosted access.
-- Desktop sign-in uses the system browser, a random loopback callback, state, nonce and PKCE. Session tokens are encrypted for the Windows account; status IPC does not expose credentials. Refresh is deduplicated, and sign-out cannot be undone by a late login response.
-- The backend handles Google OAuth exchange and refresh with a separately stored OAuth client secret, verifies identities against the owner's allowlist, and retains persistent per-user/global model limits. Model selection remains server-controlled. Desktop action planning is not provided by this answer service; indexed-project opening and supported local commands remain available.
-- Answers stream into the existing floating UI with hosted timing stages. Cancelling a task aborts its request. Existing context-retention and fresh-hotkey chat behavior remain.
-- Removed support for credential-containing installers. The old friends packaging path now refuses to run, and standard packaging verifies no owner key/session/config resources are present.
-- Consent explains transmission through Horizon's service to Google. Preferences uses a Horizon account card with sign-in, cancellation and sign-out controls.
+- Standard builds ask Horizon's Cloud Run service directly for text, image and document answers. No Google sign-in, invite code or user API-key entry is needed. Provider credentials remain in Secret Manager; credential bundling is disabled.
+- Removed desktop OAuth sessions, sign-in controls, account IPC and backend OAuth exchange/refresh endpoints. The previously created OAuth cloud resources are untouched and no longer used by deployment.
+- All clients share durable Firestore limits: 10 model attempts/minute, 100/rolling 24 hours and two concurrent calls by default. Fallback attempts count separately; quota failures block inference. Model selection remains server-controlled.
+- Answers stream into the floating UI with timing stages. Cancellation aborts requests. Context retention, fresh chats after a completed answer, local indexed-project opening and supported local commands remain available. The hosted answer service has no desktop tools or action planner.
+- Consent explains transmission through Horizon's service to Google. Preferences explains direct hosted access and the shared allowance without account controls.
+- Deployment keeps Cloud Run private. Public anonymous access needs a separate owner decision; anyone with the reachable URL could use the shared allowance and generate hosting traffic.
 
-The owner deployed the initial backend and confirmed its health/configuration checks. The updated OAuth endpoints, secret binding and desktop access still require a backend update and a real signed-in answer check before releasing this installer. Fixture tests do not establish live provider latency or availability.
+The initial backend startup checks passed. The account-free update still needs redeployment and a real answer check before publishing this installer. Local fixtures do not establish live model availability or latency.
 
-Local validation: 49 frontend, 33 desktop-command, 20 shortcut/rate-limit, 14 image, 13 attachment, seven desktop-account and 32 hosted-backend checks passed (168 total). Native hosted UI passed 18 fixture checks, and the actual packaged executable passed 13 smoke checks, including credential exclusion and real VS Code project opening. No live Gemini answer or real Google consent flow is claimed by these fixtures.
+Local validation on 13 October 2026: 49 frontend, 33 desktop-command, 20 shortcut/rate-limit, 14 image, 13 attachment and 21 hosted-backend checks passed (150 total). The native UI passed 20 checks covering text, full-screen, crop, PDF and file answers with external requests blocked. The packaged executable passed 13 checks, including its bundled perception runtime, account-free preferences and local project opening. A packaged text scan covered 2,263 files without finding a known revoked key or Gemini/OAuth secret literal. Backend dependency audit reported zero known vulnerabilities. No live cloud answer or cloud latency is claimed.
 
 ## 1.1.4
 
